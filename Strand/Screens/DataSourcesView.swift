@@ -8,6 +8,7 @@ struct DataSourcesView: View {
     @EnvironmentObject var live: LiveState
     @State private var picking = false
     @State private var pickingApple = false
+    @State private var confirmStartFresh = false
 
     var body: some View {
         ScreenScaffold(title: "Data Sources",
@@ -32,6 +33,15 @@ struct DataSourcesView: View {
                     }
                 }
             liveCard
+            startFreshCard
+        }
+        .alert("Start over?", isPresented: $confirmStartFresh) {
+            Button("Cancel", role: .cancel) { }
+            Button("Clear history", role: .destructive) {
+                model.startFresh()
+            }
+        } message: {
+            Text("This clears imported and computed scores (recovery, sleep, workouts, Apple Health) so you can reimport cleanly. Live samples from the strap stay on this Mac.")
         }
     }
 
@@ -71,6 +81,21 @@ struct DataSourcesView: View {
                 .disabled(model.importing)
                 if model.importing { ProgressView().controlSize(.small) }
             }
+        }
+    }
+
+    private var startFreshCard: some View {
+        card(title: "Start over", icon: "arrow.counterclockwise",
+             subtitle: "If a previous import looks empty or half-loaded, clear the local history and bring it in again. This is a data reset, not a rewrite — the importers stay.") {
+            Button {
+                confirmStartFresh = true
+            } label: {
+                Label("Clear imported history…", systemImage: "trash")
+                    .padding(.horizontal, 6)
+            }
+            .buttonStyle(.bordered)
+            .tint(StrandPalette.statusCritical)
+            .disabled(model.importing)
         }
     }
 

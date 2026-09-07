@@ -83,10 +83,7 @@ public struct ImportCoordinator {
 
         let names = try entryFilenames(of: url, isDirectory: isDir.boolValue)
         if names.contains("export.xml") { return .appleHealth }
-        let whoopNames: Set<String> = [
-            "physiological_cycles.csv", "sleeps.csv", "workouts.csv", "journal_entries.csv",
-        ]
-        if !names.isDisjoint(with: whoopNames) { return .whoopExport }
+        if !names.isDisjoint(with: WhoopExportImporter.recognizedFilenames) { return .whoopExport }
 
         throw ImportError.notAZipOrFolder(url.path)
     }

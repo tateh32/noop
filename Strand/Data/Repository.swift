@@ -39,6 +39,17 @@ final class Repository: ObservableObject {
     /// Expose the shared store handle (used by the importer to persist mapped rows).
     func storeHandle() async -> WhoopStore? { await ensureStore() }
 
+    /// Wipe imported and computed scores so a WHOOP / Apple Health export can be reimported
+    /// cleanly. Raw BLE streams stay on disk. Refreshes the dashboard caches after.
+    func clearImportedHistory() async {
+        guard let store = await ensureStore() else { return }
+        try? await store.clearImportedHistory()
+        days = []
+        sleeps = []
+        loaded = false
+        await refresh()
+    }
+
     /// Checkpoint the WAL into the main DB file if the store is already open, so a file-level
     /// backup captures everything. No-op (returns false) if no handle exists yet — the caller
     /// then copies the on-disk files as-is, which still includes the -wal sidecar.

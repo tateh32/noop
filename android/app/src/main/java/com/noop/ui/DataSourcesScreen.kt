@@ -23,8 +23,11 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -101,6 +104,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
     // Whole-store backup: export to a user-created document; import from a picked one.
     var busy by remember { mutableStateOf(false) }
     var restartNeeded by remember { mutableStateOf(false) }
+    var confirmStartFresh by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -325,6 +329,62 @@ fun DataSourcesScreen(vm: AppViewModel) {
                 )
             }
         }
+
+        SourceCard(
+            title = "Start over",
+            icon = Icons.Filled.Refresh,
+            subtitle = "If a previous import looks empty or half-loaded, clear the local " +
+                "history and bring it in again. Live strap samples stay on this phone.",
+        ) {
+            BackupButton(
+                label = "Clear imported history…",
+                icon = Icons.Filled.Refresh,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) { confirmStartFresh = true }
+        }
+    }
+
+    if (confirmStartFresh) {
+        AlertDialog(
+            onDismissRequest = { confirmStartFresh = false },
+            containerColor = Palette.surfaceOverlay,
+            title = { Text("Start over?", style = NoopType.headline, color = Palette.textPrimary) },
+            text = {
+                Text(
+                    "This clears imported and computed scores (recovery, sleep, workouts, " +
+                        "Apple Health, Health Connect) so you can reimport cleanly. Live " +
+                        "samples from the strap stay on this phone.",
+                    style = NoopType.subhead,
+                    color = Palette.textSecondary,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmStartFresh = false
+                        busy = true
+                        scope.launch {
+                            withContext(Dispatchers.IO) { vm.repo.clearImportedHistory() }
+                            refreshCounts()
+                            busy = false
+                            Toast.makeText(
+                                context,
+                                "Local history cleared. Import a WHOOP or Apple Health export to fill it back in.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    },
+                ) {
+                    Text("Clear history", style = NoopType.headline, color = Palette.statusCritical)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmStartFresh = false }) {
+                    Text("Cancel", style = NoopType.subhead, color = Palette.textSecondary)
+                }
+            },
+        )
     }
 }
 

@@ -63,6 +63,21 @@ public actor WhoopStore {
 
     // MARK: - Maintenance
 
+    /// Wipe imported and on-device computed scores so a WHOOP / Apple Health export can be
+    /// reimported cleanly. Raw BLE streams (`hrSample`, R-R, type-47 biometrics, events,
+    /// battery, raw outbox) stay put — those are the strap's own samples and will refill
+    /// the computed `*-noop` caches on the next IntelligenceEngine pass.
+    public func clearImportedHistory() async throws {
+        try syncWrite { db in
+            try db.execute(sql: "DELETE FROM dailyMetric")
+            try db.execute(sql: "DELETE FROM sleepSession")
+            try db.execute(sql: "DELETE FROM metricSeries")
+            try db.execute(sql: "DELETE FROM journal")
+            try db.execute(sql: "DELETE FROM workout")
+            try db.execute(sql: "DELETE FROM appleDaily")
+        }
+    }
+
     /// Fully checkpoint the WAL into the main database file and truncate the -wal file.
     /// Used before a file-level backup so the single `whoop.sqlite` carries all committed data
     /// (the -wal/-shm siblings can then be ignored). Runs outside a transaction — `wal_checkpoint`

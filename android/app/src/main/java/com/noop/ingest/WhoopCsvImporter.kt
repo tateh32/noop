@@ -29,7 +29,8 @@ import kotlin.math.roundToInt
  *
  * Differences are only in the SINK: the Swift importer returns normalized model arrays;
  * here we map those same rows onto the verified Room entities (com.noop.data) and upsert
- * through [WhoopRepository]. All WHOOP rows are written under deviceId "my-whoop".
+ * through [WhoopRepository], including the generic [com.noop.data.MetricSeriesRow] projection
+ * (Explore / Compare / Insights / Stress). All WHOOP rows are written under deviceId "my-whoop".
  *
  * Recognised filenames (case-insensitive, matched anywhere in a zip tree, exactly as Swift):
  *   physiological_cycles.csv  -> DailyMetric  (master daily summary)
@@ -81,17 +82,22 @@ object WhoopCsvImporter {
             )
         }
 
-        val cycles = csvData[CYCLES_NAME]?.let { parseCycles(CsvTable.fromData(it), deviceId) } ?: emptyList()
+        val cyclesTable = csvData[CYCLES_NAME]?.let { CsvTable.fromData(it) }
+        val cycleSources = cyclesTable?.let { WhoopCsvMetrics.sourcesFromCycles(it) } ?: emptyList()
+        val cycles = cycleSources.map { dailyFromCycle(it, deviceId) }
         val sleepParse = csvData[SLEEPS_NAME]?.let { parseSleeps(CsvTable.fromData(it), deviceId) }
         val sleepSessions = sleepParse?.sessions ?: emptyList()
         val sleepDaily = sleepParse?.daily ?: emptyList()
-        val workouts = csvData[WORKOUTS_NAME]?.let { parseWorkouts(CsvTable.fromData(it), deviceId) } ?: emptyList()
+        val workoutsTable = csvData[WORKOUTS_NAME]?.let { CsvTable.fromData(it) }
+        val workouts = workoutsTable?.let { parseWorkouts(it, deviceId) } ?: emptyList()
+        val workoutSources = workoutsTable?.let { WhoopCsvMetrics.sourcesFromWorkouts(it) } ?: emptyList()
         val journal = csvData[JOURNAL_NAME]?.let { parseJournal(CsvTable.fromData(it), deviceId) } ?: emptyList()
 
         // Merge cycle-derived and sleep-derived daily rows on (deviceId, day): cycle fields
         // (recovery / strain / RHR / HRV / SpO2 / skin-temp / resp) win where present, sleep
         // fields fill the architecture columns. One DailyMetric per day, matching the PK.
         val daily = mergeDaily(cycles, sleepDaily)
+        val metricSeries = WhoopCsvMetrics.build(deviceId, cycleSources, workoutSources)
 
         if (daily.isEmpty() && sleepSessions.isEmpty() && workouts.isEmpty() && journal.isEmpty()) {
             return ImportSummary.failure(SOURCE_LABEL, "Export contained no usable WHOOP rows.")
@@ -102,12 +108,14 @@ object WhoopCsvImporter {
         if (sleepSessions.isNotEmpty()) repo.upsertSleepSessions(sleepSessions)
         if (workouts.isNotEmpty()) repo.upsertWorkouts(workouts)
         if (journal.isNotEmpty()) repo.upsertJournal(journal)
+        if (metricSeries.isNotEmpty()) repo.upsertMetricSeries(metricSeries)
 
         val counts = LinkedHashMap<String, Int>()
         if (daily.isNotEmpty()) counts["dailyMetric"] = daily.size
         if (sleepSessions.isNotEmpty()) counts["sleepSession"] = sleepSessions.size
         if (workouts.isNotEmpty()) counts["workout"] = workouts.size
         if (journal.isNotEmpty()) counts["journal"] = journal.size
+        if (metricSeries.isNotEmpty()) counts["metricSeries"] = metricSeries.size
 
         // Date span across everything we wrote.
         val days = ArrayList<String>()
@@ -261,58 +269,27 @@ object WhoopCsvImporter {
 
     // MARK: - physiological_cycles.csv -> DailyMetric
 
-    private fun parseCycles(table: CsvTable, deviceId: String): List<DailyMetric> {
-        val out = ArrayList<DailyMetric>(table.rows.size)
-        for (row in table.rows) {
-            val tz = WhoopTime.tzOffsetMinutes(row["cycle_timezone"])
-            val cycleStart = WhoopTime.parseEpochSeconds(row.cell("cycle_start_time"), tz)
-            val cycleEnd = WhoopTime.parseEpochSeconds(row.cell("cycle_end_time"), tz)
-
-            // Skip rows with no usable timestamp at all (Swift: cycleStart == nil && cycleEnd == nil).
-            if (cycleStart == null && cycleEnd == null) continue
-            val day = epochSecondsToDay(cycleStart ?: cycleEnd!!, tz)
-
-            // Same aliases / unit handling as Swift parseCycles.
-            val recovery = row.double("recovery_score_pct")
-            val restingHr = row.double("resting_heart_rate_bpm", "resting_heart_rate")
-            val avgHrv = row.double("heart_rate_variability_ms", "heart_rate_variability_rmssd_ms")
-            val skinTemp = row.double("skin_temp_celsius", "skin_temp_f")
-            val spo2 = row.double("blood_oxygen_pct", "blood_oxygen_pct_pct")
-            val strain = row.double("day_strain")
-            val resp = row.double("respiratory_rate_rpm", "respiratory_rate")
-
-            val asleepMin = row.double("asleep_duration_min")
-            val lightMin = row.double("light_sleep_duration_min")
-            val deepMin = row.double("deep_sws_duration_min", "deep_sleep_duration_min")
-            val remMin = row.double("rem_duration_min")
-            val awakeMin = row.double("awake_duration_min")
-            val efficiency = row.double("sleep_efficiency_pct")
-
-            out.add(
-                DailyMetric(
-                    deviceId = deviceId,
-                    day = day,
-                    totalSleepMin = asleepMin,
-                    efficiency = efficiency,
-                    deepMin = deepMin,
-                    remMin = remMin,
-                    lightMin = lightMin,
-                    // "awake_duration_min" -> disturbances slot (Whoop's disturbance count is
-                    // not a separate cycles column; awake minutes are the nearest faithful proxy).
-                    disturbances = awakeMin?.roundToInt(),
-                    restingHr = restingHr?.roundToInt(),
-                    avgHrv = avgHrv,
-                    recovery = recovery,
-                    strain = strain,
-                    exerciseCount = null, // not present in physiological_cycles.csv
-                    spo2Pct = spo2,
-                    skinTempDevC = skinTemp,
-                    respRateBpm = resp,
-                )
-            )
-        }
-        return out
-    }
+    /** Map one parsed cycle onto the wide daily cache. Series extras live in [WhoopCsvMetrics]. */
+    private fun dailyFromCycle(src: CycleSeriesSource, deviceId: String): DailyMetric = DailyMetric(
+        deviceId = deviceId,
+        day = src.day,
+        totalSleepMin = src.asleepMin,
+        efficiency = src.efficiency,
+        deepMin = src.deepMin,
+        remMin = src.remMin,
+        lightMin = src.lightMin,
+        // "awake_duration_min" -> disturbances slot (Whoop's disturbance count is
+        // not a separate cycles column; awake minutes are the nearest faithful proxy).
+        disturbances = src.awakeMin?.roundToInt(),
+        restingHr = src.rhr?.roundToInt(),
+        avgHrv = src.hrv,
+        recovery = src.recovery,
+        strain = src.strain,
+        exerciseCount = null, // not present in physiological_cycles.csv
+        spo2Pct = src.spo2,
+        skinTempDevC = src.skinTemp,
+        respRateBpm = src.resp,
+    )
 
     // MARK: - sleeps.csv -> SleepSession (+ DailyMetric sleep fields)
 

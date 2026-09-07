@@ -285,6 +285,18 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Clear imported and computed scores so the next WHOOP / Apple Health import starts clean.
+    /// Live strap samples are kept. Safe to call while a previous import looks empty or half-loaded.
+    func startFresh() {
+        importing = true
+        importSummary = nil
+        Task {
+            await repo.clearImportedHistory()
+            importSummary = "Local history cleared. Import a WHOOP or Apple Health export to fill it back in."
+            importing = false
+        }
+    }
+
     /// Import an Apple Health export (export.zip) — streams + aggregates per-day into the store
     /// under the `apple-health` source, then refreshes. Large exports take ~1–2 minutes.
     func importAppleHealth(url: URL) {
