@@ -20,18 +20,19 @@ the WHOOP 5.0 / MG protocol from **`b-nnett/goose`**. See [`../ATTRIBUTION.md`](
 
 ## TL;DR
 
+- **The iPhone app exists.** Scheme **NOOPiOS** (`StrandiOS/` + shared `Strand/` screens,
+  iOS 16+, iPhone-only). Sideload from Xcode — see [`BUILD.md`](BUILD.md).
 - **All five shared packages already build for iOS.** Every `Package.swift` declares
   `.iOS(.v16)` alongside `.macOS(.v13)`, and the only UI-framework-specific code is
   guarded with `#if canImport(UIKit)` / `#if canImport(AppKit)`.
-- The work to ship on iOS is **app-layer only**: a new iOS app target that reuses
-  `WhoopProtocol`, `WhoopStore`, `StrandAnalytics`, `StrandImport`, and `StrandDesign`
-  unchanged, plus iOS variants of the handful of macOS-only app-layer services
-  (menu bar, screen lock, Shortcuts, pasteboard).
-- **CoreBluetooth is fully available on iOS** and the BLE engine is already written
-  with iOS background collection in mind (state restoration hooks exist).
-- **HealthKit is available on iOS** (it is not on macOS), so iOS can do *two-way*
-  Apple Health: read live, and write NOOP-computed metrics back. On macOS, Apple
-  Health is import-only via the static `export.xml` / `export.zip` file.
+- **WHOOP import is the full-history path.** Save the `.zip` from app.whoop.com → Data
+  Management into Files, then More → Data Sources. The importer stages the file into the
+  app container (iCloud/Files URLs fail in-place) and Today shows the latest *scored* day,
+  not the blank in-progress cycle at the end of the export.
+- **CoreBluetooth** uses state restoration on iOS (`CBCentralManagerOptionRestoreIdentifierKey`
+  + `UIBackgroundModes: bluetooth-central`). Simulator has no BLE.
+- **HealthKit two-way sync is still optional / not required** to use the app. Apple Health
+  history still comes in via `export.zip`, same as on the Mac.
 
 ---
 
@@ -466,13 +467,15 @@ targets:
 
 ## Port checklist
 
-- [ ] Add `StrandiOS` app target depending on the five existing packages (no package changes).
-- [ ] Construct `CBCentralManager` with `CBCentralManagerOptionRestoreIdentifierKey: BLEManager.restoreID`.
-- [ ] Add `UIBackgroundModes: [bluetooth-central]` and `NSBluetoothAlwaysUsageDescription`.
+- [x] Add `NOOPiOS` app target depending on the five existing packages (no package changes).
+- [x] Construct `CBCentralManager` with `CBCentralManagerOptionRestoreIdentifierKey: BLEManager.restoreID`.
+- [x] Add `UIBackgroundModes: [bluetooth-central]` and `NSBluetoothAlwaysUsageDescription`.
+- [x] Swap `NSPasteboard` → `UIPasteboard` behind an `#if os` helper (`PlatformOpen`).
+- [x] Hide `lockScreen` on iPhone; keep `buzzBack` / `markMoment` / `runShortcut`.
+- [x] WHOOP import stages Files/iCloud zips and skips the blank trailing cycle so Today fills.
 - [ ] Replace `MenuBarExtra` with a WidgetKit widget (+ optional Live Activity); reuse `StrandDesign` views.
-- [ ] Build an iOS action layer: drop `lockScreen`, keep `buzzBack`/`markMoment`/`none`, expose **App Intents** for inbound automation and `shortcuts://` / x-callback-url for outbound.
-- [ ] Swap `NSPasteboard` → `UIPasteboard` behind an `#if os` helper.
-- [ ] Add a `HealthKitBridge` doing two-way Apple Health (read live + write NOOP metrics), mapping `HKSample`s onto the existing `StrandImport` models and `WhoopStore` ingest path. Add the HealthKit capability and the two Health usage strings.
+- [ ] App Intents for inbound automation (Shortcuts/Siri).
+- [ ] Add a `HealthKitBridge` doing two-way Apple Health (read live + write NOOP metrics). Not required for WHOOP CSV import.
 - [ ] Verify BLE on a **physical iPhone** with a real strap (no Simulator BLE).
 
 ---

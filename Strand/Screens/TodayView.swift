@@ -40,10 +40,15 @@ struct TodayView: View {
         ScreenScaffold(title: "Control Center", subtitle: dateLine) {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                 HealthAlertBanner()
-                if repo.today?.recovery == nil {
+                if repo.days.isEmpty {
                     DataPendingNote(
                         title: "Live now. Your scores are building.",
                         message: "Your live heart rate is working from the strap, and recovery, strain and sleep build from it over your next few nights of wear, sharpening as it learns your baseline. Want your full history instantly? Import your WHOOP export in Data Sources and it backfills in about a minute."
+                    )
+                } else if repo.today?.recovery == nil && repo.today?.avgHrv == nil && repo.today?.strain == nil {
+                    DataPendingNote(
+                        title: "Days are in. Scores are still blank.",
+                        message: "NOOP stored \(repo.days.count) days but none have recovery, HRV or strain yet. On Data Sources, tap Start over, then reimport the .zip from app.whoop.com → Data Management."
                     )
                 }
                 heroSection
@@ -65,12 +70,25 @@ struct TodayView: View {
                 .accessibilityLabel("Support NOOP — donate or get in touch")
             }
         }
+        #if os(iOS)
+        .sheet(isPresented: $showingSupport) {
+            NavigationStack {
+                SupportView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingSupport = false }
+                        }
+                    }
+            }
+        }
+        #else
         .overlay {
             if showingSupport {
                 SupportModalOverlay(isPresented: $showingSupport)
             }
         }
         .animation(.easeOut(duration: 0.18), value: showingSupport)
+        #endif
     }
 
     // MARK: Readiness — on-device training-readiness synthesis (HRV / resting-HR / load).

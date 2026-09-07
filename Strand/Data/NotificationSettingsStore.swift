@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import Combine
 import SwiftUI
@@ -195,3 +196,4 @@ final class NotificationSettingsStore: ObservableObject {
         return out
     }
 }
+#endif

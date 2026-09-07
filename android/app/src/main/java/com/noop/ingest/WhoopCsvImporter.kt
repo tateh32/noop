@@ -126,7 +126,8 @@ object WhoopCsvImporter {
         val firstDay = days.minOrNull()
         val lastDay = days.maxOrNull()
 
-        val total = counts.values.sum()
+        // metricSeries is a projection of the same days — don't count it in the user-facing total.
+        val total = counts.filterKeys { it != "metricSeries" }.values.sum()
         val message = buildString {
             append("Imported ")
             append(total)

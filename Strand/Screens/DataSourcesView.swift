@@ -10,15 +10,26 @@ struct DataSourcesView: View {
     @State private var pickingApple = false
     @State private var confirmStartFresh = false
 
+    #if os(iOS)
+    /// iOS Files often presents a WHOOP zip as generic data, not `public.zip-archive`.
+    private static let importTypes: [UTType] = [.zip, .data, .item]
+    private static let deviceWord = "this iPhone"
+    private static let whoopBlurb = "Import your full WHOOP history from a data export (.zip). Save it to Files on this iPhone (Safari download or AirDrop), then pick it here. Get one at app.whoop.com → Data Management."
+    #else
+    private static let importTypes: [UTType] = [.zip, .folder]
+    private static let deviceWord = "this Mac"
+    private static let whoopBlurb = "Import your full WHOOP history — recovery, strain, sleep, workouts — from a data export (.zip). Works for WHOOP 4.0, 5.0 and MG. Get one at app.whoop.com → Data Management."
+    #endif
+
     var body: some View {
         ScreenScaffold(title: "Data Sources",
-                       subtitle: "Everything stays on this Mac. Bring your history in once, then it's yours.") {
+                       subtitle: "Everything stays on \(Self.deviceWord). Bring your history in once, then it's yours.") {
             // Each importer lives on its OWN card. Two `.fileImporter` modifiers on the
             // same view silently collapse to one in SwiftUI — which is why the WHOOP
             // button used to do nothing while Apple Health worked (issue #5).
             whoopCard
                 .fileImporter(isPresented: $picking,
-                              allowedContentTypes: [.zip, .folder],
+                              allowedContentTypes: Self.importTypes,
                               allowsMultipleSelection: false) { result in
                     if case .success(let urls) = result, let url = urls.first {
                         model.importWhoop(url: url)
@@ -26,7 +37,7 @@ struct DataSourcesView: View {
                 }
             appleHealthCard
                 .fileImporter(isPresented: $pickingApple,
-                              allowedContentTypes: [.zip, .folder],
+                              allowedContentTypes: Self.importTypes,
                               allowsMultipleSelection: false) { result in
                     if case .success(let urls) = result, let url = urls.first {
                         model.importAppleHealth(url: url)
@@ -41,13 +52,13 @@ struct DataSourcesView: View {
                 model.startFresh()
             }
         } message: {
-            Text("This clears imported and computed scores (recovery, sleep, workouts, Apple Health) so you can reimport cleanly. Live samples from the strap stay on this Mac.")
+            Text("This clears imported and computed scores (recovery, sleep, workouts, Apple Health) so you can reimport cleanly. Live samples from the strap stay on \(Self.deviceWord).")
         }
     }
 
     private var whoopCard: some View {
         card(title: "WHOOP Export", icon: "square.and.arrow.down.fill",
-             subtitle: "Import your full WHOOP history — recovery, strain, sleep, workouts — from a data export (.zip). Works for WHOOP 4.0, 5.0 and MG. Get one at app.whoop.com → Data Management.") {
+             subtitle: Self.whoopBlurb) {
             HStack(spacing: 12) {
                 Button {
                     picking = true
@@ -62,7 +73,9 @@ struct DataSourcesView: View {
                 if model.importing { ProgressView().controlSize(.small) }
             }
             if let s = model.importSummary {
-                Text(s).font(StrandFont.subhead).foregroundStyle(StrandPalette.statusPositive)
+                Text(s)
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(Self.summaryColor(s))
             }
             Text("\(repo.days.count) days · \(repo.sleeps.count) sleeps stored")
                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
@@ -114,6 +127,14 @@ struct DataSourcesView: View {
                 Text(label).font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
             }
         }
+    }
+
+    private static func summaryColor(_ s: String) -> Color {
+        let lower = s.lowercased()
+        if lower.contains("failed") || lower.contains("couldn't") || lower.contains("no scored") {
+            return StrandPalette.statusCritical
+        }
+        return StrandPalette.statusPositive
     }
 
     @ViewBuilder

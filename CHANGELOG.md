@@ -17,18 +17,20 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
-## 1.3 — Past health data: import the history, don't start the app over
+## 1.3 — iPhone app, and a WHOOP import that actually fills Today
 
-Don't throw the project away if a previous import looks empty. The BLE offload and
-importers stay; what's new is a clean **Start over** on Data Sources (macOS and Android)
-that clears imported/computed scores so you can reimport, plus an Android fix so a WHOOP
-CSV actually fills Explore / Compare / Insights / Stress (`metricSeries` was never written).
+If you sideloaded before and Today stayed empty after a WHOOP export, that was
+the product — there was no iPhone target, and a successful import still pointed
+Today at the in-progress cycle (blank recovery / HRV / strain).
 
-- **Android WHOOP import now writes the metric series** the explorer screens read — same keys
-  as macOS (`recovery`, `hrv`, `sleep_performance`, zone minutes, derived stress, …).
-- **Start over** on Data Sources: clears daily/sleep/workout/journal/Apple Health caches.
-  Live strap samples stay. Confirm first; then import again.
-- **Auto-detect recognises German WHOOP filenames** (`physiologische_zyklen.csv`, `Schlaf.csv`, …).
+- **iPhone app (`NOOPiOS`).** Same screens and store as the Mac app. In Xcode:
+  `xcodegen generate` → scheme **NOOPiOS** → set your signing team → Run on your iPhone.
+- **Import that shows up.** The WHOOP `.zip` is copied out of Files/iCloud before parse
+  (in-place reads often fail on iOS). Empty trailing cycles are skipped. Today shows the
+  latest *scored* day, not the open one at the end of the export.
+- **Start over** on Data Sources: clears imported/computed scores so you can reimport
+  cleanly. Live strap samples stay.
+- **German WHOOP filenames** (`physiologische_zyklen.csv`, `Schlaf.csv`, …) are recognised.
 
 ## 1.2 — Readiness, and the start of WHOOP 5/MG
 

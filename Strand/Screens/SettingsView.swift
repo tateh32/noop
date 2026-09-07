@@ -23,11 +23,13 @@ struct SettingsView: View {
 
     var body: some View {
         ScreenScaffold(title: "Settings",
-                       subtitle: "Your numbers, your strap, and how NOOP works. All on this Mac.") {
+                       subtitle: "Your numbers, your strap, and how NOOP works. All on \(DeviceCopy.here).") {
             profileCard
             strapCard
             experimentalCard
+            #if os(macOS)
             backupCard
+            #endif
             aboutCard
         }
         .alert(backupAlertTitle, isPresented: $showBackupAlert) {
@@ -240,6 +242,7 @@ struct SettingsView: View {
         }
     }
 
+#if os(macOS)
     private var backupCard: some View {
         SettingsSection(
             icon: "externaldrive.fill",
@@ -322,6 +325,7 @@ struct SettingsView: View {
             showBackupAlert = true
         }
     }
+#endif
 
     // MARK: - About
 
