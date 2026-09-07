@@ -32,7 +32,7 @@ Pre-built apps you can run right now:
 | **macOS** | `NOOP.app` (see [Releases](../../releases)) | Apple Silicon + Intel. Drag to Applications. |
 | **Android** | `NOOP-full.apk` (see [Releases](../../releases)) | The full app. `minSdk 26` (Android 8+). Sideload — enable "install unknown apps". |
 | **Android (demo)** | `NOOP-demo.apk` | Preloaded with sample data so you can explore every screen with no strap. Installs alongside the full app. |
-| **iOS** | — | The shared library is iOS-ready; the app is on the roadmap. |
+| **iPhone** | Sideload from Xcode | Scheme **NOOPiOS**. Plug in your iPhone, pick your signing team, Run. See [`docs/BUILD.md`](docs/BUILD.md). |
 
 Prefer to build it yourself? See [`docs/BUILD.md`](docs/BUILD.md).
 
@@ -159,7 +159,7 @@ import required.
 |---|---|
 | **macOS** | ✅ Full app (`Strand/`, SwiftUI, macOS 13+). Pairs over BLE, offloads the strap's history, and scores recovery / strain / sleep on-device. The complete feature set above runs here. |
 | **Android** | ✅ Full app (`android/`, Jetpack Compose, Android 8+). Pairs over BLE, persists and scores on-device, and imports WHOOP / Apple Health / Health Connect. Grab the APK from [Releases](../../releases). |
-| **iOS** | 🟡 Libraries ready. Every package declares `.iOS(.v16)` and UI-framework code is guarded with `#if canImport(UIKit)` / `AppKit`; an iOS app target is planned. |
+| **iPhone** | ✅ App target (`StrandiOS/` + shared `Strand/` screens, iOS 16+). Sideload with Xcode (scheme **NOOPiOS**). Import a WHOOP `.zip` from Files, or pair the strap from Live. |
 
 ### What to expect when you start
 
@@ -260,6 +260,29 @@ model):
 Palette, typography, motion, and reusable components/charts (`RecoveryRing`,
 `StrainGauge`, `Hypnogram`, `Sparkline`, `TrendChart`, `YearHeatStrip`,
 `StrandCard`, `StatePill`, …) — no external UI dependencies.
+
+---
+
+## Quickstart (iPhone)
+
+You need a Mac with Xcode, a USB cable, and your iPhone. A free Apple ID is enough to sideload onto a device you own.
+
+```bash
+git clone <your-fork-url> NOOP
+cd NOOP
+brew install xcodegen   # if you don't have it
+xcodegen generate
+open Strand.xcodeproj
+```
+
+1. Select the **NOOPiOS** scheme (not Strand — that one is the Mac app).
+2. In Signing & Capabilities, choose your Personal Team. Bundle id is `com.noopapp.noop.ios`.
+3. Plug in the iPhone, trust the computer, pick it as the run destination, press Run.
+4. On the phone: Settings → General → VPN & Device Management → trust your developer cert.
+5. In the app: **More → Data Sources → Choose export…** and pick the `.zip` from [app.whoop.com](https://app.whoop.com) → Data Management (save it to Files first, via Safari or AirDrop).
+6. Today should show recovery / strain / sleep for the latest finished day. If a previous import looks empty, tap **Start over** and import again.
+
+Live heart rate needs a physical iPhone and the official WHOOP app closed (one host at a time). The Simulator can test import; it cannot talk to the strap.
 
 ---
 

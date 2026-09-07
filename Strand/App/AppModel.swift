@@ -192,7 +192,10 @@ final class AppModel: ObservableObject {
     func runMacAction(_ kind: MacActionKind, shortcut: String) {
         switch kind {
         case .none: break
-        case .lockScreen: if !MacActions.lockScreen() { MacActions.runShortcut("Lock Screen") }
+        case .lockScreen:
+            #if os(macOS)
+            if !MacActions.lockScreen() { MacActions.runShortcut("Lock Screen") }
+            #endif
         case .buzzBack: buzz(loops: 1)
         case .markMoment: markMoment()
         case .runShortcut: MacActions.runShortcut(shortcut)
@@ -212,7 +215,9 @@ final class AppModel: ObservableObject {
         if worn {
             if !behavior.wristOnShortcut.isEmpty { MacActions.runShortcut(behavior.wristOnShortcut) }
         } else {
+            #if os(macOS)
             if behavior.autoLockOnWristOff, !MacActions.lockScreen() { MacActions.runShortcut("Lock Screen") }
+            #endif
             if !behavior.wristOffShortcut.isEmpty { MacActions.runShortcut(behavior.wristOffShortcut) }
         }
     }
@@ -264,23 +269,39 @@ final class AppModel: ObservableObject {
         importing = true
         importSummary = nil
         Task {
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
+                let local = try ImportStaging.copyIntoInbox(url)
+                defer { try? FileManager.default.removeItem(at: local) }
                 guard let store = await repo.storeHandle() else {
                     importSummary = "Couldn't open the local store."; importing = false; return
                 }
-                let summary = try await WhoopImporter.importExport(url: url, into: store, deviceId: deviceId)
+                let summary = try await WhoopImporter.importExport(url: local, into: store, deviceId: deviceId)
                 await repo.refresh()
-                let span: String
-                if let a = summary.earliest, let b = summary.latest {
-                    let f = DateFormatter(); f.dateFormat = "MMM yyyy"
-                    span = " · \(f.string(from: a))–\(f.string(from: b))"
-                } else { span = "" }
-                importSummary = "Imported \(summary.recordCount) records\(span)"
+                if repo.days.isEmpty {
+                    importSummary = "The file opened but no scored days were stored. Use the .zip from app.whoop.com → Data Management (it should contain physiological_cycles.csv)."
+                } else {
+                    let span: String
+                    if let a = summary.earliest, let b = summary.latest {
+                        let f = DateFormatter(); f.dateFormat = "MMM yyyy"
+                        span = " · \(f.string(from: a))–\(f.string(from: b))"
+                    } else { span = "" }
+                    importSummary = "Imported \(repo.days.count) days · \(repo.sleeps.count) sleeps\(span)"
+                }
             } catch {
-                importSummary = "Import failed: \(error)"
+                importSummary = "Import failed: \(error.localizedDescription)"
             }
+            importing = false
+        }
+    }
+
+    /// Clear imported and computed scores so the next WHOOP / Apple Health import starts clean.
+    /// Live strap samples are kept. Safe to call while a previous import looks empty or half-loaded.
+    func startFresh() {
+        importing = true
+        importSummary = nil
+        Task {
+            await repo.clearImportedHistory()
+            importSummary = "Local history cleared. Import a WHOOP or Apple Health export to fill it back in."
             importing = false
         }
     }
@@ -291,17 +312,17 @@ final class AppModel: ObservableObject {
         importing = true
         importSummary = nil
         Task {
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             do {
+                let local = try ImportStaging.copyIntoInbox(url)
+                defer { try? FileManager.default.removeItem(at: local) }
                 guard let store = await repo.storeHandle() else {
                     importSummary = "Couldn't open the local store."; importing = false; return
                 }
-                let summary = try await AppleHealthImport.importExport(url: url, into: store, deviceId: appleDeviceId)
+                let summary = try await AppleHealthImport.importExport(url: local, into: store, deviceId: appleDeviceId)
                 await repo.refresh()
                 importSummary = "Apple Health: imported \(summary.recordCount) records"
             } catch {
-                importSummary = "Apple Health import failed: \(error)"
+                importSummary = "Apple Health import failed: \(error.localizedDescription)"
             }
             importing = false
         }

@@ -22,8 +22,20 @@ final class Repository: ObservableObject {
 
     init(deviceId: String) { self.deviceId = deviceId }
 
-    /// The most recent day with data (treated as "today" for the dashboard hero).
-    var today: DailyMetric? { days.last }
+    /// The most recent *usable* day for the dashboard hero.
+    ///
+    /// A WHOOP export almost always ends with the in-progress cycle (today) whose
+    /// recovery / HRV / strain cells are still blank. Using `days.last` then makes a
+    /// successful years-long import look empty on Today. Prefer the latest day that
+    /// actually has a score; fall back to the last row only when nothing is scored yet.
+    var today: DailyMetric? { Self.displayDay(from: days) }
+
+    /// Latest day with a recovery/HRV/strain/RHR value, else the last stored day.
+    static func displayDay(from days: [DailyMetric]) -> DailyMetric? {
+        days.last(where: {
+            $0.recovery != nil || $0.avgHrv != nil || $0.strain != nil || $0.restingHr != nil
+        }) ?? days.last
+    }
     /// The trailing 7 days (for the week strip), oldest→newest.
     var week: [DailyMetric] { Array(days.suffix(7)) }
 
@@ -38,6 +50,17 @@ final class Repository: ObservableObject {
 
     /// Expose the shared store handle (used by the importer to persist mapped rows).
     func storeHandle() async -> WhoopStore? { await ensureStore() }
+
+    /// Wipe imported and computed scores so a WHOOP / Apple Health export can be reimported
+    /// cleanly. Raw BLE streams stay on disk. Refreshes the dashboard caches after.
+    func clearImportedHistory() async {
+        guard let store = await ensureStore() else { return }
+        try? await store.clearImportedHistory()
+        days = []
+        sleeps = []
+        loaded = false
+        await refresh()
+    }
 
     /// Checkpoint the WAL into the main DB file if the store is already open, so a file-level
     /// backup captures everything. No-op (returns false) if no handle exists yet — the caller

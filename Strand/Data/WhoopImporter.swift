@@ -14,6 +14,12 @@ enum WhoopImporter {
         var metrics: [DailyMetric] = []
         for c in result.cycles {
             guard let start = c.cycleStart else { continue }
+            // Skip the trailing in-progress cycle (blank recovery/strain/HRV/sleep) so
+            // `days.last` is a real scored day after import — the usual reason a WHOOP
+            // export "imported" but Today stayed empty.
+            let hasSignal = c.recoveryScore != nil || c.dayStrain != nil
+                || c.hrvMs != nil || c.restingHeartRate != nil || c.asleepDurationMin != nil
+            guard hasSignal else { continue }
             metrics.append(DailyMetric(
                 day: dayString(start, tzOffsetMin: c.tzOffsetMin),
                 totalSleepMin: c.asleepDurationMin,

@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(AppKit)
 import AppKit
+#endif
 
 /// What a strap double-tap (or a wrist-off trigger) does on the Mac.
 enum MacActionKind: String, Codable, CaseIterable, Identifiable {
@@ -10,6 +12,16 @@ enum MacActionKind: String, Codable, CaseIterable, Identifiable {
     case runShortcut
 
     var id: String { rawValue }
+
+    /// Actions the current platform can actually run. Lock-the-Mac is hidden on iPhone.
+    static var availableCases: [MacActionKind] {
+        #if os(iOS)
+        allCases.filter { $0 != .lockScreen }
+        #else
+        Array(allCases)
+        #endif
+    }
+
     var label: String {
         switch self {
         case .none:        return "Nothing"
@@ -38,6 +50,7 @@ enum MacActions {
     /// so callers can fall back to a "Lock Screen" Shortcut.
     @discardableResult
     static func lockScreen() -> Bool {
+        #if os(macOS)
         let path = "/System/Library/PrivateFrameworks/login.framework/login"
         guard let handle = dlopen(path, RTLD_NOW) else { return false }
         defer { dlclose(handle) }
@@ -46,6 +59,9 @@ enum MacActions {
         let fn = unsafeBitCast(sym, to: LockFn.self)
         _ = fn()
         return true
+        #else
+        return false
+        #endif
     }
 
     /// Run a macOS Shortcut by name via the `shortcuts://` URL scheme. Anything the user can build in
@@ -55,6 +71,6 @@ enum MacActions {
         guard !trimmed.isEmpty,
               let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let url = URL(string: "shortcuts://run-shortcut?name=\(encoded)") else { return }
-        NSWorkspace.shared.open(url)
+        PlatformOpen.url(url)
     }
 }

@@ -17,6 +17,21 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.3 — iPhone app, and a WHOOP import that actually fills Today
+
+If you sideloaded before and Today stayed empty after a WHOOP export, that was
+the product — there was no iPhone target, and a successful import still pointed
+Today at the in-progress cycle (blank recovery / HRV / strain).
+
+- **iPhone app (`NOOPiOS`).** Same screens and store as the Mac app. In Xcode:
+  `xcodegen generate` → scheme **NOOPiOS** → set your signing team → Run on your iPhone.
+- **Import that shows up.** The WHOOP `.zip` is copied out of Files/iCloud before parse
+  (in-place reads often fail on iOS). Empty trailing cycles are skipped. Today shows the
+  latest *scored* day, not the open one at the end of the export.
+- **Start over** on Data Sources: clears imported/computed scores so you can reimport
+  cleanly. Live strap samples stay.
+- **German WHOOP filenames** (`physiologische_zyklen.csv`, `Schlaf.csv`, …) are recognised.
+
 ## 1.2 — Readiness, and the start of WHOOP 5/MG
 
 - **New: Readiness.** A "should you push today?" card on Today that synthesizes established

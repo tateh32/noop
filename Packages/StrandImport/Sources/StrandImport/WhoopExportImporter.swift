@@ -20,6 +20,14 @@ public struct WhoopExportImporter {
     private static let workoutsName = "workouts.csv"
     private static let journalName = "journal_entries.csv"
 
+    /// English WHOOP export names plus the localized aliases `localizedAlias` knows about.
+    /// Used by `ImportCoordinator.detectKind` so a German zip is recognised as a WHOOP
+    /// export even when auto-detecting (issue #3).
+    public static let recognizedFilenames: Set<String> = [
+        cyclesName, sleepsName, workoutsName, journalName,
+        "physiologische_zyklen.csv", "schlaf.csv", "trainings.csv", "logbuch_eintraege.csv",
+    ]
+
     /// Map a known localized WHOOP export filename to its canonical English name. WHOOP localizes
     /// the CSV filenames in non-English exports (issue #3): a German export ships Schlaf.csv,
     /// Trainings.csv, physiologische_zyklen.csv, and logbuch_eintraege.csv.

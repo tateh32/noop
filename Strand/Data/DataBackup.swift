@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import AppKit
 import UniformTypeIdentifiers
@@ -198,3 +199,4 @@ enum DataBackup {
         }
     }
 }
+#endif

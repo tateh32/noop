@@ -267,7 +267,7 @@ private struct WelcomeStep: View {
                     .font(StrandFont.title2)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .opacity(appear ? 1 : 0)
-                Text("A private window into your recovery, sleep and strain — read straight from your strap, kept only on this Mac.")
+                Text("A private window into your recovery, sleep and strain — read straight from your strap, kept only on \(DeviceCopy.here).")
                     .font(StrandFont.body)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .multilineTextAlignment(.center)
@@ -303,7 +303,7 @@ private struct WhatItDoesStep: View {
         .init(icon: "lock.shield",
               tint: StrandPalette.statusPositive,
               title: "Own your data, offline",
-              body: "Everything lives on this Mac. No account, no sync, no cloud. Your thread is yours alone."),
+              body: "Everything lives on \(DeviceCopy.here). No account, no sync, no cloud. Your thread is yours alone."),
     ]
 
     var body: some View {
@@ -452,7 +452,7 @@ private struct WearStep: View {
                 VStack(spacing: 12) {
                     Checkline(text: "Wear it snug on your wrist or bicep — sensor against skin.")
                     Checkline(text: "Give it a few minutes of charge if the battery is low.")
-                    Checkline(text: "Keep it within about a metre of this Mac.")
+                    Checkline(text: "Keep it within about a metre of \(DeviceCopy.here).")
                 }
                 .frame(maxWidth: 440)
             }
@@ -552,7 +552,7 @@ private struct ScanStep: View {
                         .foregroundStyle(StrandPalette.textPrimary)
                 }
 
-                Text("WHOOP straps don't appear in macOS System Settings → Bluetooth. They advertise on a custom profile that only apps like NOOP can find — so there's nothing to pair there, and you shouldn't try.")
+                Text("WHOOP straps don't appear in Settings → Bluetooth. They advertise on a custom profile that only apps like NOOP can find — so there's nothing to pair there, and you shouldn't try.")
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -562,7 +562,7 @@ private struct ScanStep: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Checkline(text: "It's charged and worn — the sensor needs skin contact to wake.")
                     Checkline(text: "It isn't held by the WHOOP phone app. Only one host at a time — close the app or turn off its Bluetooth.")
-                    Checkline(text: "It's within about a metre of this Mac.")
+                    Checkline(text: "It's within about a metre of \(DeviceCopy.here).")
                 }
 
                 Button(action: retry) {
@@ -719,7 +719,11 @@ private struct ImportStep: View {
                 HStack(spacing: 8) {
                     Image(systemName: "sidebar.left")
                         .foregroundStyle(StrandPalette.textTertiary)
+                    #if os(iOS)
+                    Text("Find it under More → Data Sources.")
+                    #else
                     Text("Find it in the sidebar under Data Sources.")
+                    #endif
                         .font(StrandFont.subhead)
                         .foregroundStyle(StrandPalette.textSecondary)
                 }

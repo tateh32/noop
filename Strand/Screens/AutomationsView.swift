@@ -22,13 +22,13 @@ struct AutomationsView: View {
 
     private var doubleTapCard: some View {
         Section2(icon: "hand.tap.fill", title: "Double-tap",
-                 blurb: "Double-tap the strap to trigger an action on this Mac. (The strap exposes a single double-tap gesture.)") {
+                 blurb: "Double-tap the strap to trigger an action on \(DeviceCopy.here). (The strap exposes a single double-tap gesture.)") {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Text("When I double-tap").font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
                     Spacer()
                     Picker("", selection: $behavior.doubleTapAction) {
-                        ForEach(MacActionKind.allCases) { Text($0.label).tag($0) }
+                        ForEach(MacActionKind.availableCases) { Text($0.label).tag($0) }
                     }
                     .labelsHidden().fixedSize()
                 }
@@ -78,12 +78,14 @@ struct AutomationsView: View {
 
     private var wearCard: some View {
         Section2(icon: "figure.walk.motion", title: "Wear & presence",
-                 blurb: "React when the strap comes off or goes on. Note: macOS reserves true auto-UNLOCK for Apple Watch — this can lock, not unlock.") {
+                 blurb: "React when the strap comes off or goes on.") {
             VStack(spacing: 0) {
+                #if os(macOS)
                 ToggleRow(label: "Lock the Mac when I take the strap off",
-                          help: "Fires the moment the strap leaves your wrist.",
+                          help: "Fires the moment the strap leaves your wrist. macOS reserves true auto-UNLOCK for Apple Watch — this can lock, not unlock.",
                           isOn: $behavior.autoLockOnWristOff)
                 rowDivider
+                #endif
                 shortcutFieldRow("Run a Shortcut when taken off",
                                  help: "Presence automation — set a Focus, pause media, set away…",
                                  text: $behavior.wristOffShortcut)
@@ -116,7 +118,7 @@ struct AutomationsView: View {
 
     private var alarmCard: some View {
         Section2(icon: "alarm.fill", title: "Smart alarm",
-                 blurb: "Wake to a wrist buzz. This arms the strap's own firmware alarm, so it still fires if the Mac is asleep or NOOP is closed.") {
+                 blurb: "Wake to a wrist buzz. This arms the strap's own firmware alarm, so it still fires if \(DeviceCopy.here) is asleep or NOOP is closed.") {
             VStack(spacing: 0) {
                 ToggleRow(label: "Enable smart alarm", help: "Arms the strap to buzz at your wake time.",
                           isOn: $behavior.smartAlarmEnabled)
@@ -133,7 +135,7 @@ struct AutomationsView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Light-sleep window").font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
-                            Text("Wake up to this many minutes early if the Mac stays awake & connected and a light phase is detected.")
+                            Text("Wake up to this many minutes early if \(DeviceCopy.here) stays awake & connected and a light phase is detected.")
                                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }

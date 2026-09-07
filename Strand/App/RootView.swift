@@ -58,6 +58,10 @@ struct RootView: View {
     @State private var selection: NavItem? = .today
 
     var body: some View {
+        #if os(iOS)
+        iPhoneRoot()
+            .task { await repo.refresh() }
+        #else
         NavigationSplitView {
             VStack(spacing: 0) {
                 List(NavItem.allCases, selection: $selection) { item in
@@ -73,13 +77,15 @@ struct RootView: View {
             .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
             .safeAreaInset(edge: .top) { brand }
         } detail: {
-            detail
+            NavDetail(item: selection ?? .today)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(StrandPalette.surfaceBase.ignoresSafeArea())
         }
         .task { await repo.refresh() }
+        #endif
     }
 
+    #if os(macOS)
     private var brand: some View {
         HStack(spacing: 8) {
             Text("NOOP")
@@ -89,9 +95,15 @@ struct RootView: View {
         }
         .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
     }
+    #endif
+}
 
-    @ViewBuilder private var detail: some View {
-        switch selection ?? .today {
+/// Shared screen switch used by the Mac sidebar and the iPhone More list.
+struct NavDetail: View {
+    let item: NavItem
+
+    var body: some View {
+        switch item {
         case .today: TodayView()
         case .intelligence: IntelligenceView()
         case .coach: CoachView()
@@ -116,6 +128,66 @@ struct RootView: View {
     }
 }
 
+#if os(iOS)
+/// iPhone shell: five tabs. Everything else lives under More so import is one tap away.
+private struct iPhoneRoot: View {
+    private enum Tab: Hashable {
+        case today, sleep, trends, live, more
+    }
+
+    @State private var tab: Tab = .today
+
+    var body: some View {
+        TabView(selection: $tab) {
+            NavigationStack { TodayView() }
+                .tabItem { Label("Today", systemImage: NavItem.today.icon) }
+                .tag(Tab.today)
+
+            NavigationStack { SleepView() }
+                .tabItem { Label("Sleep", systemImage: NavItem.sleep.icon) }
+                .tag(Tab.sleep)
+
+            NavigationStack { TrendsView() }
+                .tabItem { Label("Trends", systemImage: NavItem.trends.icon) }
+                .tag(Tab.trends)
+
+            NavigationStack { LiveView() }
+                .tabItem { Label("Live", systemImage: NavItem.live.icon) }
+                .tag(Tab.live)
+
+            NavigationStack { MoreMenuView() }
+                .tabItem { Label("More", systemImage: "ellipsis.circle.fill") }
+                .tag(Tab.more)
+        }
+        .tint(StrandPalette.accent)
+    }
+}
+
+private struct MoreMenuView: View {
+    private var items: [NavItem] {
+        let hide: Set<NavItem> = [.today, .sleep, .trends, .live]
+        let rest = NavItem.allCases.filter { !hide.contains($0) && $0 != .dataSources }
+        return [.dataSources] + rest
+    }
+
+    var body: some View {
+        List {
+            ForEach(items) { item in
+                NavigationLink {
+                    NavDetail(item: item)
+                } label: {
+                    Label(item.rawValue, systemImage: item.icon)
+                }
+            }
+        }
+        .navigationTitle("More")
+        .scrollContentBackground(.hidden)
+        .background(StrandPalette.surfaceBase)
+    }
+}
+#endif
+
+#if os(macOS)
 /// Isolated live-status pill — owns the LiveState observation so the rest of RootView (sidebar
 /// list + detail) does not re-render on the ~1 Hz HR / frame stream.
 private struct SidebarStatus: View {
@@ -149,3 +221,4 @@ private struct SidebarStatus: View {
         live.bonded ? "WHOOP · Bonded" : live.connected ? "Connecting…" : "Disconnected"
     }
 }
+#endif

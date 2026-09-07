@@ -227,4 +227,24 @@ interface WhoopDao {
     /** Latest battery sample for a device (most recent ts), or null. */
     @Query("SELECT * FROM battery WHERE deviceId = :deviceId ORDER BY ts DESC LIMIT 1")
     suspend fun latestBattery(deviceId: String): BatterySample?
+
+    // MARK: - Start-over (clear imported / computed caches; keep raw BLE streams)
+
+    @Query("DELETE FROM dailyMetric")
+    suspend fun deleteAllDailyMetrics()
+
+    @Query("DELETE FROM sleepSession")
+    suspend fun deleteAllSleepSessions()
+
+    @Query("DELETE FROM metricSeries")
+    suspend fun deleteAllMetricSeries()
+
+    @Query("DELETE FROM journal")
+    suspend fun deleteAllJournal()
+
+    @Query("DELETE FROM workout")
+    suspend fun deleteAllWorkouts()
+
+    @Query("DELETE FROM appleDaily")
+    suspend fun deleteAllAppleDaily()
 }
