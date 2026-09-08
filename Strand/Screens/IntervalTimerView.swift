@@ -331,14 +331,41 @@ struct IntervalTimerView: View {
 
     private func configStepper(title: String, unit: String?, value: Binding<Int>,
                                range: ClosedRange<Int>, step: Int, tint: Color) -> some View {
-        let labels = VStack(alignment: .leading, spacing: 2) {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                configStepperLabels(title: title, unit: unit, range: range, step: step)
+                Spacer(minLength: 8)
+                configStepperValue(value.wrappedValue, unit: unit, tint: tint)
+            }
+            HStack {
+                Spacer(minLength: 0)
+                configStepperControl(title: title, unit: unit, value: value, range: range, step: step)
+            }
+        }
+        #else
+        HStack {
+            configStepperLabels(title: title, unit: unit, range: range, step: step)
+            Spacer()
+            configStepperValue(value.wrappedValue, unit: unit, tint: tint)
+            configStepperControl(title: title, unit: unit, value: value, range: range, step: step)
+        }
+        #endif
+    }
+
+    private func configStepperLabels(title: String, unit: String?,
+                                     range: ClosedRange<Int>, step: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
             Text(title).font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
             Text("\(range.lowerBound)–\(range.upperBound)\(unit.map { " \($0)" } ?? "") · step \(step)")
                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        let valueReadout = HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text("\(value.wrappedValue)")
+    }
+
+    private func configStepperValue(_ value: Int, unit: String?, tint: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text("\(value)")
                 .font(StrandFont.number(24))
                 .foregroundStyle(tint)
                 .frame(minWidth: 44, alignment: .trailing)
@@ -346,30 +373,13 @@ struct IntervalTimerView: View {
                 Text(unit).font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
             }
         }
-        let stepper = Stepper("", value: value, in: range, step: step)
+    }
+
+    private func configStepperControl(title: String, unit: String?, value: Binding<Int>,
+                                      range: ClosedRange<Int>, step: Int) -> some View {
+        Stepper("", value: value, in: range, step: step)
             .labelsHidden()
             .accessibilityLabel("\(title) \(unit ?? "")")
-
-        #if os(iOS)
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                labels
-                Spacer(minLength: 8)
-                valueReadout
-            }
-            HStack {
-                Spacer(minLength: 0)
-                stepper
-            }
-        }
-        #else
-        HStack {
-            labels
-            Spacer()
-            valueReadout
-            stepper
-        }
-        #endif
     }
 
     // MARK: Timer logic
