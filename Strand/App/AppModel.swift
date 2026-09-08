@@ -26,6 +26,8 @@ final class AppModel: ObservableObject {
     let intelligence: IntelligenceEngine
     /// Opt-in AI coach (bring-your-own-key) — the one networked feature, off until the user enables it.
     let coach: AICoachEngine
+    /// In-progress Start/Stop workout (GPS + strap HR). Survives tab switches.
+    let session = LiveSessionRecorder()
 
     /// Timestamps of moments marked via a double-tap (persisted).
     @Published var moments: [Date] = []

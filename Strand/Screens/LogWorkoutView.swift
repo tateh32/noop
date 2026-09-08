@@ -202,6 +202,22 @@ enum WorkoutSport: String, CaseIterable, Identifiable {
     case hiking = "Hiking"
     case other = "Workout"
     var id: String { rawValue }
+
+    /// Phone GPS for outdoor sports. Indoor sports skip it.
+    var usesPhoneGPS: Bool {
+        switch self {
+        case .running, .walking, .cycling, .hiking: return true
+        default: return false
+        }
+    }
+
+    /// Phone Core Motion step count (not Apple Watch).
+    var usesPedometer: Bool {
+        switch self {
+        case .running, .walking, .hiking: return true
+        default: return false
+        }
+    }
 }
 
 /// Full-width door into `LogWorkoutView` — used on Today → Train and the workout log.

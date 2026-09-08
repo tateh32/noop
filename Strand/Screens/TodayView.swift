@@ -13,7 +13,7 @@ import Foundation
 // Composition (top → bottom):
 //   (a) HERO  — full-width HStack that fills the width EQUALLY: RecoveryRing (left card)
 //               + InsightCard "Today's Synthesis" (right card). No lone card, no gap.
-//   (b) TRAIN (iPhone) — Breathe, Intervals, Workouts, Current session.
+//   (b) TRAIN (iPhone) — Live session (GPS/HR), Log a session, Breathe, Intervals, History, Current.
 //   (c) METRICS — one adaptive LazyVGrid of fixed-104pt StatTiles (Recovery, Strain,
 //               Sleep, HRV, RHR, SpO2, Respiratory, Steps, Weight, Calories) each with
 //               a 14-day sparkline so the grid tiles perfectly with no empty cells.
@@ -321,6 +321,9 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Train", overline: "Work",
                           trailing: workoutsToday.isEmpty ? "No session today" : "\(workoutsToday.count) today")
+            LiveSessionEntryLink {
+                Task { await reloadWorkouts() }
+            }
             LogWorkoutEntryLink {
                 Task { await reloadWorkouts() }
             }

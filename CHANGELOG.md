@@ -28,16 +28,20 @@ tools that were buried under More.
 - **All Sessions** stacks on a phone instead of a ~600pt Mac table. Range pills
   scroll when they don't fit.
 - **Breathe, Intervals, and Workouts** move from More onto Today as a **Train**
-  section, with a **Log a session** button (sport, start, duration — no watch),
-  plus **Current** for today's session and **History** for the full log.
+  section, with a **Live session** (Start / Stop), **Log a session** (after the
+  fact), **Current**, and **History**.
+- **Live session** records duration on the phone. Running / walking / cycling /
+  hiking use **iPhone GPS** for distance and pace, and the phone’s step counter
+  on foot sports. Heart rate comes from the **WHOOP strap** if it is bonded.
+  There is no Apple Watch app and no live HealthKit.
 - Strap-detected bouts now persist as NOOP workouts after a scored night. A
   WHOOP or Apple Health session that overlaps a detected bout still wins.
   Phone-logged sessions always stay in the log.
 - Breathing Start / Test buzz and interval status / steppers wrap on a phone.
 
 You do **not** need an Apple Watch Ultra or a Garmin. NOOP's device is the WHOOP
-strap. Log a session from Today → Train, or import a WHOOP / Apple Health zip,
-or wear the strap overnight.
+strap. Start a **Live session** from Today → Train (phone GPS on runs), log a
+session by hand, import a WHOOP / Apple Health zip, or wear the strap overnight.
 
 Rebuild scheme **NOOPiOS** from this branch after `xcodegen generate`.
 
