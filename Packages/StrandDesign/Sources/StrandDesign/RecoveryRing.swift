@@ -182,7 +182,7 @@ public struct RecoveryRing: View {
             Text(numberString)
                 .font(StrandFont.display(diameter * 0.30))
                 .foregroundStyle(StrandPalette.textPrimary)
-                .contentTransition(.numericText())
+                .noopNumericText(value: numberString)
             Text(stateWord)
                 .font(StrandFont.overline)
                 .tracking(StrandFont.overlineTracking)

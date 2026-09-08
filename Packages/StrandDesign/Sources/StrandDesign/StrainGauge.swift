@@ -160,7 +160,7 @@ public struct StrainGauge: View {
             Text(strainString)
                 .font(StrandFont.display(diameter * 0.26))
                 .foregroundStyle(StrandPalette.textPrimary)
-                .contentTransition(.numericText())
+                .noopNumericText(value: strainString)
             Text("STRAIN")
                 .font(StrandFont.overline)
                 .tracking(StrandFont.overlineTracking)
