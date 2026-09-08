@@ -43,17 +43,3 @@ struct ContentView: View {
         }
     }
 }
-        .sheet(isPresented: $showWhatsNew) {
-            WhatsNewView(onClose: {
-                lastSeenChangelog = AppChangelog.currentVersion
-                showWhatsNew = false
-            })
-        }
-        .onAppear {
-            // Existing users who updated: their last-seen version is behind the current one.
-            if onboarded && lastSeenChangelog != AppChangelog.currentVersion {
-                showWhatsNew = true
-            }
-        }
-    }
-}
