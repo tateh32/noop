@@ -23,6 +23,9 @@ struct LiveView: View {
                        subtitle: "Your strap in real time — heart rate and frames as they arrive.") {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                 connectionRow
+                #if os(iOS)
+                LiveSessionEntryLink()
+                #endif
                 heartRateCard
                 statusGrid
                 if !live.bonded { modelPicker }
@@ -31,7 +34,10 @@ struct LiveView: View {
             }
         }
         .onAppear { if live.bonded { model.startRealtimeHR(); model.getBattery() } }
-        .onDisappear { model.stopRealtimeHR() }
+        .onDisappear {
+            // A live workout still needs the HR stream if the user left this tab.
+            if !model.session.running { model.stopRealtimeHR() }
+        }
         .onChange(of: live.bonded) { bonded in
             if bonded { model.startRealtimeHR(); model.getBattery() }
         }

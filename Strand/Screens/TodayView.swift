@@ -13,7 +13,7 @@ import Foundation
 // Composition (top → bottom):
 //   (a) HERO  — full-width HStack that fills the width EQUALLY: RecoveryRing (left card)
 //               + InsightCard "Today's Synthesis" (right card). No lone card, no gap.
-//   (b) TRAIN (iPhone) — Live session (GPS/HR), Log a session, Breathe, Intervals, History, Current.
+//   (b) TRAIN (iPhone, top of Today) — Live session, Log a session, Breathe, Intervals, History, Current.
 //   (c) METRICS — one adaptive LazyVGrid of fixed-104pt StatTiles (Recovery, Strain,
 //               Sleep, HRV, RHR, SpO2, Respiratory, Steps, Weight, Calories) each with
 //               a 14-day sparkline so the grid tiles perfectly with no empty cells.
@@ -89,6 +89,9 @@ struct TodayView: View {
     @ViewBuilder
     private var todaySections: some View {
         HealthAlertBanner()
+        #if os(iOS)
+        trainSection
+        #endif
         if repo.days.isEmpty {
             DataPendingNote(
                 title: "Live now. Your scores are building.",
@@ -97,16 +100,13 @@ struct TodayView: View {
         } else if repo.today?.recovery == nil && repo.today?.avgHrv == nil && repo.today?.strain == nil {
             DataPendingNote(
                 title: "Days are in. Scores are still blank.",
-                message: "NOOP stored \(repo.days.count) days but none have recovery, HRV or strain yet. On Data Sources, tap Start over, then reimport the .zip from app.whoop.com → Data Management."
+                message: "NOOP stored \(repo.days.count) days but none have recovery, HRV or strain yet. On Data Sources, tap Start over, then import the .zip from app.whoop.com → Data Management."
             )
         } else if let stale = staleScoreNote {
             DataPendingNote(title: stale.title, message: stale.message, symbol: "calendar")
         }
         heroSection
         readinessSection
-        #if os(iOS)
-        trainSection
-        #endif
         metricsSection
         workoutsSection
         sourcesSection

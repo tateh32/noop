@@ -30,20 +30,21 @@ tools that were buried under More.
 - **Breathe, Intervals, and Workouts** move from More onto Today as a **Train**
   section, with a **Live session** (Start / Stop), **Log a session** (after the
   fact), **Current**, and **History**.
-- **Live session** records duration on the phone. Running / walking / cycling /
-  hiking use **iPhone GPS** for distance and pace, and the phone’s step counter
-  on foot sports. Heart rate comes from the **WHOOP strap** if it is bonded.
+- **Live session** is the first card on **Today** (Train) and also on the **Live**
+  tab. Start / Stop records duration. Running / walking / cycling / hiking use
+  **iPhone GPS**. Heart rate comes from the **WHOOP strap** if it is bonded.
   There is no Apple Watch app and no live HealthKit.
-- Strap-detected bouts now persist as NOOP workouts after a scored night. A
-  WHOOP or Apple Health session that overlaps a detected bout still wins.
-  Phone-logged sessions always stay in the log.
-- Breathing Start / Test buzz and interval status / steppers wrap on a phone.
 
-You do **not** need an Apple Watch Ultra or a Garmin. NOOP's device is the WHOOP
-strap. Start a **Live session** from Today → Train (phone GPS on runs), log a
-session by hand, import a WHOOP / Apple Health zip, or wear the strap overnight.
+Rebuild scheme **NOOPiOS** from this branch. You must **pull**, not only checkout:
 
-Rebuild scheme **NOOPiOS** from this branch after `xcodegen generate`.
+```bash
+git checkout cursor/ios-train-explore-layout-8abc
+git pull origin cursor/ios-train-explore-layout-8abc
+# if Info.plist is dirty: git checkout -- StrandiOS/Resources/Info.plist
+xcodegen generate
+```
+
+Then set bundle ID back to `com.t8o.noop` if generate reset it.
 
 ## 1.3.5 — Today stays on today after a WHOOP import
 
