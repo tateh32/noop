@@ -39,24 +39,16 @@ struct TodayView: View {
 
     var body: some View {
         ScreenScaffold(title: "Control Center", subtitle: dateLine) {
-            VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
-                HealthAlertBanner()
-                if repo.days.isEmpty {
-                    DataPendingNote(
-                        title: "Live now. Your scores are building.",
-                        message: "Your live heart rate is working from the strap, and recovery, strain and sleep build from it over your next few nights of wear, sharpening as it learns your baseline. Want your full history instantly? Import your WHOOP export in Data Sources and it backfills in about a minute."
-                    )
-                } else if repo.today?.recovery == nil && repo.today?.avgHrv == nil && repo.today?.strain == nil {
-                    DataPendingNote(
-                        title: "Days are in. Scores are still blank.",
-                        message: "NOOP stored \(repo.days.count) days but none have recovery, HRV or strain yet. On Data Sources, tap Start over, then reimport the .zip from app.whoop.com → Data Management."
-                    )
+            Group {
+                #if os(iOS)
+                LazyVStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                    todaySections
                 }
-                heroSection
-                readinessSection
-                metricsSection
-                workoutsSection
-                sourcesSection
+                #else
+                VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                    todaySections
+                }
+                #endif
             }
         }
         .task(id: repo.today?.day) { await loadAll() }
@@ -90,6 +82,27 @@ struct TodayView: View {
         }
         .animation(.easeOut(duration: 0.18), value: showingSupport)
         #endif
+    }
+
+    @ViewBuilder
+    private var todaySections: some View {
+        HealthAlertBanner()
+        if repo.days.isEmpty {
+            DataPendingNote(
+                title: "Live now. Your scores are building.",
+                message: "Your live heart rate is working from the strap, and recovery, strain and sleep build from it over your next few nights of wear, sharpening as it learns your baseline. Want your full history instantly? Import your WHOOP export in Data Sources and it backfills in about a minute."
+            )
+        } else if repo.today?.recovery == nil && repo.today?.avgHrv == nil && repo.today?.strain == nil {
+            DataPendingNote(
+                title: "Days are in. Scores are still blank.",
+                message: "NOOP stored \(repo.days.count) days but none have recovery, HRV or strain yet. On Data Sources, tap Start over, then reimport the .zip from app.whoop.com → Data Management."
+            )
+        }
+        heroSection
+        readinessSection
+        metricsSection
+        workoutsSection
+        sourcesSection
     }
 
     // MARK: Readiness — on-device training-readiness synthesis (HRV / resting-HR / load).
@@ -168,25 +181,33 @@ struct TodayView: View {
             SectionHeader("Today’s Synthesis", overline: "At a glance",
                           trailing: greetingWord)
             HStack(alignment: .top, spacing: NoopMetrics.gap) {
-                // Left: the signature ring in a card.
                 NoopCard {
                     RecoveryRing(
                         score: score ?? 0,
                         supporting: ringSupporting(d),
-                        diameter: 168
+                        diameter: PhoneBudget.isPhone ? 200 : 168
                     )
                     .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
 
-                // Right: the plain-English read-out, equal width.
+                if !PhoneBudget.isPhone {
+                    InsightCard(
+                        category: "Recovery",
+                        status: synthesisWord(score),
+                        detail: synthesisDetail(d),
+                        statusColor: score.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.textTertiary
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            if PhoneBudget.isPhone {
                 InsightCard(
                     category: "Recovery",
                     status: synthesisWord(score),
                     detail: synthesisDetail(d),
                     statusColor: score.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.textTertiary
                 )
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -350,15 +371,15 @@ struct TodayView: View {
     private func loadAll() async {
         readiness = ReadinessEngine.evaluate(days: repo.days)
 
-        // 14-day sparklines — Whoop. Query a short window, not the full import.
-        sparks["recovery"]        = await sparkValues("recovery", source: "my-whoop", window: 14)
-        sparks["strain"]          = await sparkValues("strain", source: "my-whoop", window: 14)
-        sparks["sleep_total_min"] = await sparkValues("sleep_total_min", source: "my-whoop", window: 14)
-        sparks["hrv"]             = await sparkValues("hrv", source: "my-whoop", window: 14)
-        sparks["rhr"]             = await sparkValues("rhr", source: "my-whoop", window: 14)
-        sparks["spo2"]            = await sparkValues("spo2", source: "my-whoop", window: 14)
+        // Whoop tiles: spark from the days already in RAM. Skip 6 metricSeries round-trips.
+        let tail = repo.days.suffix(14)
+        sparks["recovery"]        = tail.compactMap(\.recovery)
+        sparks["strain"]          = tail.compactMap(\.strain)
+        sparks["sleep_total_min"] = tail.compactMap(\.totalSleepMin)
+        sparks["hrv"]             = tail.compactMap(\.avgHrv)
+        sparks["rhr"]             = tail.compactMap { $0.restingHr.map(Double.init) }
+        sparks["spo2"]            = tail.compactMap(\.spo2Pct)
 
-        // 14-day sparklines — Apple Health.
         sparks["resp_rate"]   = await sparkValues("resp_rate", source: "apple-health", window: 14)
         sparks["steps"]       = await sparkValues("steps", source: "apple-health", window: 14)
         sparks["weight"]      = await sparkValues("weight", source: "apple-health", window: 90)

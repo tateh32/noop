@@ -42,7 +42,7 @@ struct TrendsView: View {
         }
     }
 
-    @State private var range: Range = .quarter
+    @State private var range: Range = PhoneBudget.isPhone ? .month : .quarter
 
     // yyyy-MM-dd → Date (en_US_POSIX, UTC), per task spec.
     private static let dayParser: DateFormatter = {

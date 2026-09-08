@@ -27,7 +27,7 @@ public struct StrainGauge: View {
         diameter: CGFloat = 200,
         lineWidth: CGFloat = 14,
         showsLabel: Bool = true,
-        showsHover: Bool = true,
+        showsHover: Bool = !StrandPerf.reducedEffects,
         valueFormat: @escaping (Double) -> String = { String(format: "Strain %.1f", $0) }
     ) {
         self.strain = strain
@@ -92,30 +92,40 @@ public struct StrainGauge: View {
             }
         }
         .onAppear {
-            withAnimation(StrandMotion.drawIn) { animatedFraction = fraction }
-            bloomPulse = true
+            if StrandPerf.reducedEffects {
+                animatedFraction = fraction
+            } else {
+                withAnimation(StrandMotion.drawIn) { animatedFraction = fraction }
+                bloomPulse = true
+            }
         }
         .onChange(of: strain) { _ in
-            withAnimation(StrandMotion.drawIn) { animatedFraction = fraction }
+            if StrandPerf.reducedEffects {
+                animatedFraction = fraction
+            } else {
+                withAnimation(StrandMotion.drawIn) { animatedFraction = fraction }
+            }
         }
     }
 
     private var ring: some View {
         ZStack {
-            arc(to: animatedFraction)
-                .stroke(
-                    AngularGradient(
-                        gradient: StrandPalette.strainGradient,
-                        center: .center,
-                        startAngle: startAngle,
-                        endAngle: endAngle
-                    ),
-                    style: StrokeStyle(lineWidth: lineWidth * 1.05, lineCap: .round)
-                )
-                .blur(radius: bloomRadius)
-                .opacity(bloomOpacity * (bloomPulse ? 1.0 : 0.8))
-                .animation(StrandMotion.breathe, value: bloomPulse)
-                .blendMode(.plusLighter)
+            if !StrandPerf.reducedEffects {
+                arc(to: animatedFraction)
+                    .stroke(
+                        AngularGradient(
+                            gradient: StrandPalette.strainGradient,
+                            center: .center,
+                            startAngle: startAngle,
+                            endAngle: endAngle
+                        ),
+                        style: StrokeStyle(lineWidth: lineWidth * 1.05, lineCap: .round)
+                    )
+                    .blur(radius: bloomRadius)
+                    .opacity(bloomOpacity * (bloomPulse ? 1.0 : 0.8))
+                    .animation(StrandMotion.breathe, value: bloomPulse)
+                    .blendMode(.plusLighter)
+            }
 
             arc(to: 1.0)
                 .stroke(StrandPalette.hairline.opacity(0.55),
@@ -144,9 +154,11 @@ public struct StrainGauge: View {
             let pt = CGPoint(x: center.x + radius * cos(tipAngle),
                              y: center.y + radius * sin(tipAngle))
             ZStack {
-                Circle().fill(tipColor)
-                    .frame(width: lineWidth * 2.2, height: lineWidth * 2.2)
-                    .blur(radius: lineWidth * 0.85).opacity(0.7).blendMode(.plusLighter)
+                if !StrandPerf.reducedEffects {
+                    Circle().fill(tipColor)
+                        .frame(width: lineWidth * 2.2, height: lineWidth * 2.2)
+                        .blur(radius: lineWidth * 0.85).opacity(0.7).blendMode(.plusLighter)
+                }
                 Circle().fill(Color.white)
                     .frame(width: lineWidth * 0.58, height: lineWidth * 0.58)
                     .overlay(Circle().fill(tipColor).opacity(0.35))

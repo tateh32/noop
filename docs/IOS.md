@@ -48,6 +48,11 @@ The phone build now: no mmap, lazy tabs, off-main import/scoring, short sparklin
 queries, downsampled charts, one-year heat-strip. Rebuild scheme **NOOPiOS** after
 pulling this branch.
 
+A follow-up (1.3.2) also turns off Mac-only GPU extras on iPhone: the recovery ring
+no longer runs a forever-breathe blur, sparklines drop plus-lighter halos, the
+dashboard keeps 400 days not a decade, and the scorer does not re-walk raw HR when
+a WHOOP import already filled recovery.
+
 ---
 
 ## Current platform support in the packages

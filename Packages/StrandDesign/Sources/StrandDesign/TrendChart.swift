@@ -46,7 +46,7 @@ public struct TrendChart: View {
         valueRange: ClosedRange<Double> = 0...100,
         showsArea: Bool = true,
         height: CGFloat = 220,
-        showsHover: Bool = true,
+        showsHover: Bool = !StrandPerf.reducedEffects,
         valueFormat: @escaping (Double) -> String = { String(Int($0.rounded())) },
         dateFormat: @escaping (Date) -> String = { TrendChart.defaultDateString($0) }
     ) {
@@ -126,13 +126,15 @@ public struct TrendChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                 .foregroundStyle(valueGradient)
             }
-            ForEach(points) { p in
-                PointMark(
-                    x: .value("Date", p.date),
-                    y: .value("Value", p.value)
-                )
-                .symbolSize(18)
-                .foregroundStyle(StrandPalette.sample(stops: gradient.toStops(), at: unit(p.value)))
+            if !StrandPerf.reducedEffects {
+                ForEach(points) { p in
+                    PointMark(
+                        x: .value("Date", p.date),
+                        y: .value("Value", p.value)
+                    )
+                    .symbolSize(18)
+                    .foregroundStyle(StrandPalette.sample(stops: gradient.toStops(), at: unit(p.value)))
+                }
             }
         }
         .chartYScale(domain: valueRange)

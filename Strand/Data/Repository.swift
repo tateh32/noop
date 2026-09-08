@@ -72,18 +72,19 @@ final class Repository: ObservableObject {
 
     /// Reload the dashboard caches over the last `nDays`, merging imported history with the
     /// on-device computed scores so a strap-only user still gets a populated dashboard.
-    func refresh(days nDays: Int = 4000) async {
+    func refresh(days nDays: Int = PhoneBudget.dashboardDays) async {
         guard let store = await ensureStore() else { return }
         let now = Date()
         let fromDay = Self.dayString(now.addingTimeInterval(-Double(nDays) * 86_400))
         let toDay = Self.dayString(now.addingTimeInterval(86_400))
         let nowTs = Int(now.timeIntervalSince1970)
         let lo = nowTs - nDays * 86_400, hi = nowTs + 86_400
+        let sleepLimit = PhoneBudget.sleepCacheLimit
 
         let imported = (try? await store.dailyMetrics(deviceId: deviceId, from: fromDay, to: toDay)) ?? []
         let computed = (try? await store.dailyMetrics(deviceId: computedDeviceId, from: fromDay, to: toDay)) ?? []
-        let impSleep = (try? await store.sleepSessions(deviceId: deviceId, from: lo, to: hi, limit: 4000)) ?? []
-        let compSleep = (try? await store.sleepSessions(deviceId: computedDeviceId, from: lo, to: hi, limit: 4000)) ?? []
+        let impSleep = (try? await store.sleepSessions(deviceId: deviceId, from: lo, to: hi, limit: sleepLimit)) ?? []
+        let compSleep = (try? await store.sleepSessions(deviceId: computedDeviceId, from: lo, to: hi, limit: sleepLimit)) ?? []
 
         self.days = Self.mergeDaily(imported: imported, computed: computed)
         self.sleeps = Self.mergeSleep(imported: impSleep, computed: compSleep)

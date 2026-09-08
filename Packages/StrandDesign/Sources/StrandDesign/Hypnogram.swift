@@ -42,7 +42,7 @@ public struct Hypnogram: View {
         intervals: [SleepInterval],
         height: CGFloat = 180,
         showsStageAxis: Bool = true,
-        showsHover: Bool = true,
+        showsHover: Bool = !StrandPerf.reducedEffects,
         nightStart: Date? = nil
     ) {
         self.intervals = intervals.sorted { $0.start < $1.start }
@@ -105,7 +105,7 @@ public struct Hypnogram: View {
                         let color = StrandPalette.sleepStageColor(interval.stage)
                         let dimmed = hoverIndex != nil && hoverIndex != idx
                         // glow under REM for the "REM glowing" requirement
-                        if interval.stage == .rem {
+                        if interval.stage == .rem, !StrandPerf.reducedEffects {
                             RoundedRectangle(cornerRadius: rect.height / 2)
                                 .fill(color)
                                 .frame(width: rect.width, height: rect.height)

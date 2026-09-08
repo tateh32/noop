@@ -170,6 +170,14 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(Sparkline.defaultValueString(64.5), "64.5")
     }
 
+    func testReducedEffectsMatchesPlatform() {
+        #if os(iOS)
+        XCTAssertTrue(StrandPerf.reducedEffects)
+        #else
+        XCTAssertFalse(StrandPerf.reducedEffects)
+        #endif
+    }
+
     func testTrendPointIdentityIsTheDateNotARandomUUID() {
         let d = Date(timeIntervalSince1970: 1_700_000_000)
         let a = TrendPoint(date: d, value: 10)

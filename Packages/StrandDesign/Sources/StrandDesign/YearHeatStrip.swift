@@ -37,7 +37,7 @@ public struct YearHeatStrip: View {
         cellSize: CGFloat = 12,
         spacing: CGFloat = 3,
         showsMonthLabels: Bool = true,
-        showsHover: Bool = true,
+        showsHover: Bool = !StrandPerf.reducedEffects,
         valueFormat: @escaping (Double) -> String = { "Recovery \(Int($0.rounded()))" }
     ) {
         self.days = days.sorted { $0.date < $1.date }

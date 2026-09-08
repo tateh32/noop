@@ -40,6 +40,9 @@ final class IntelligenceEngine: ObservableObject {
     /// Heavy sleep-staging runs off the main actor. On iPhone we score fewer nights and cap the
     /// per-stream sample count so a 14-day BLE offload cannot jetsam the process.
     func analyzeRecent(maxDays: Int = PhoneBudget.intelligenceDays) async {
+        // A WHOOP import already filled recovery. Scoring raw HR on launch is what
+        // made Today hitch 20 seconds after open.
+        if PhoneBudget.skipScoringWhenImported, repo.today?.recovery != nil { return }
         guard let store = await repo.storeHandle() else { note = "No on-device store yet."; return }
         guard let hrvCfg = Baselines.metricCfg["hrv"],
               let rhrCfg = Baselines.metricCfg["resting_hr"] else { return }

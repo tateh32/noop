@@ -16,6 +16,13 @@ enum PhoneBudget {
     /// How far back dashboard sparkline queries go. Mac still reads full history.
     static var sparkQueryDays: Int { isPhone ? 90 : 4000 }
 
+    /// Daily rows kept in `Repository.days`. Today/Sleep/Readiness only need months,
+    /// not a decade of WHOOP history in RAM.
+    static var dashboardDays: Int { isPhone ? 400 : 4000 }
+
+    /// Sleep sessions loaded into `Repository.sleeps`.
+    static var sleepCacheLimit: Int { isPhone ? 90 : 4000 }
+
     /// Workout rows fetched for the Today grid.
     static var workoutQueryDays: Int { isPhone ? 120 : 4000 }
 
@@ -26,11 +33,14 @@ enum PhoneBudget {
     static var intelligenceSampleLimit: Int { isPhone ? 24_000 : 200_000 }
 
     /// Year-heat cells. A full multi-year strip is thousands of SwiftUI views.
-    static var heatStripMaxDays: Int { isPhone ? 366 : 4000 }
+    static var heatStripMaxDays: Int { isPhone ? 180 : 4000 }
 
     /// Chart marks before we stride-downsample.
     static var chartMaxPoints: Int { isPhone ? 160 : 800 }
 
     /// Strap log lines kept in LiveState.
     static var liveLogCap: Int { isPhone ? 40 : 200 }
+
+    /// Skip the on-device scorer when a WHOOP import already filled recovery.
+    static var skipScoringWhenImported: Bool { isPhone }
 }

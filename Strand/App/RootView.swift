@@ -60,7 +60,7 @@ struct RootView: View {
     var body: some View {
         #if os(iOS)
         iPhoneRoot()
-            .task { await repo.refresh() }
+            .task { if !repo.loaded { await repo.refresh() } }
         #else
         NavigationSplitView {
             VStack(spacing: 0) {

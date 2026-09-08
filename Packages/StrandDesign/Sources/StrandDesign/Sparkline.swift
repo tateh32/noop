@@ -31,7 +31,7 @@ public struct Sparkline: View {
         lineWidth: CGFloat = 2,
         showsArea: Bool = true,
         showsHead: Bool = true,
-        showsHover: Bool = true,
+        showsHover: Bool = !StrandPerf.reducedEffects,
         valueFormat: @escaping (Double) -> String = { Sparkline.defaultValueString($0) },
         indexLabel: ((Int) -> String)? = nil
     ) {
@@ -87,9 +87,11 @@ public struct Sparkline: View {
                 }
                 if showsHead, let head = pts.last {
                     let c = StrandPalette.sample(stops: gradient.stops, at: 1.0)
-                    Circle().fill(c).frame(width: lineWidth * 3.2, height: lineWidth * 3.2)
-                        .blur(radius: lineWidth * 1.2).opacity(0.8).blendMode(.plusLighter)
-                        .position(head)
+                    if !StrandPerf.reducedEffects {
+                        Circle().fill(c).frame(width: lineWidth * 3.2, height: lineWidth * 3.2)
+                            .blur(radius: lineWidth * 1.2).opacity(0.8).blendMode(.plusLighter)
+                            .position(head)
+                    }
                     Circle().fill(Color.white).frame(width: lineWidth * 1.6, height: lineWidth * 1.6)
                         .position(head)
                 }
@@ -114,7 +116,7 @@ public struct Sparkline: View {
                     )
                 }
             }
-            .animation(StrandMotion.fade, value: hoverX)
+            .animation(StrandPerf.reducedEffects ? nil : StrandMotion.fade, value: hoverX)
             .contentShape(Rectangle())
             .onContinuousHover(coordinateSpace: .local) { phase in
                 guard showsHover else { return }

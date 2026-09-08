@@ -17,6 +17,21 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.3.2 — iPhone: Today is actually scrollable
+
+1.3.1 stopped the crashes. The remaining hitch was the Mac visual budget still
+running on the home screen: a forever-breathe **blur bloom** on the recovery ring,
+plus-lighter halos on every sparkline, a decade of days loaded into RAM, and the
+on-device scorer kicking in even after a WHOOP import.
+
+- Recovery ring / strain gauge / sparklines drop blur, forever-breathe, and hover on iPhone.
+- Trend charts skip per-point marks. Heat-strip is six months.
+- Dashboard cache is 400 days, not 4000. Sleep list is 90 nights.
+- Whoop sparklines come from RAM, not six extra SQLite round-trips.
+- Scoring is skipped when a WHOOP import already filled recovery.
+
+Rebuild scheme **NOOPiOS** from this branch.
+
 ## 1.3.1 — iPhone: stop the freezes and crashes
 
 The first iPhone sideload compiled the Mac screens as-is. That is why it felt
