@@ -17,6 +17,18 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.3.3 — iPhone review pass before the next sideload
+
+A full pass over the iPhone target after 1.3.2. Three things would have bitten on device:
+
+- **Scoring skip is per night, not all-or-nothing.** `repo.today` is the latest *scored* day (often yesterday after a WHOOP import). Skipping the whole engine meant new strap nights never got scored. Uncovered nights still score; nights that already have recovery do not.
+- **iOS 16 hover compile.** `.onContinuousHover(coordinateSpace: .local)` resolves to the iOS 17 API under a current Xcode. Charts now use a 16-safe helper.
+- **Zip copy is off the main thread.** Picking a WHOOP / Apple Health export no longer copies hundreds of MB on the UI actor.
+
+Also: Live controls stack vertically, Notifications is hidden from More (Mac stub), onboarding padding and Support donate/contact wrap on a phone, scoring waits until onboarding finishes, bundle version is 1.3.3.
+
+Rebuild scheme **NOOPiOS** from this branch after `xcodegen generate`.
+
 ## 1.3.2 — iPhone: Today is actually scrollable
 
 1.3.1 stopped the crashes. The remaining hitch was the Mac visual budget still

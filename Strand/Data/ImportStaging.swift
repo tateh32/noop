@@ -18,7 +18,16 @@ enum ImportStaging {
     }
 
     /// Security-scope the URL, coordinate a read, copy into a unique temp file, return that path.
-    static func copyIntoInbox(_ url: URL) throws -> URL {
+    /// The copy itself is off the main actor — a WHOOP / Apple Health zip can be
+    /// hundreds of MB, and `AppModel` is `@MainActor`.
+    static func copyIntoInbox(_ url: URL) async throws -> URL {
+        try await Task.detached(priority: .userInitiated) {
+            try copyNow(url)
+        }.value
+    }
+
+    /// Synchronous copy. The detached worker and tests share this.
+    static func copyNow(_ url: URL) throws -> URL {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 

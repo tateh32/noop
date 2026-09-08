@@ -40,9 +40,6 @@ final class IntelligenceEngine: ObservableObject {
     /// Heavy sleep-staging runs off the main actor. On iPhone we score fewer nights and cap the
     /// per-stream sample count so a 14-day BLE offload cannot jetsam the process.
     func analyzeRecent(maxDays: Int = PhoneBudget.intelligenceDays) async {
-        // A WHOOP import already filled recovery. Scoring raw HR on launch is what
-        // made Today hitch 20 seconds after open.
-        if PhoneBudget.skipScoringWhenImported, repo.today?.recovery != nil { return }
         guard let store = await repo.storeHandle() else { note = "No on-device store yet."; return }
         guard let hrvCfg = Baselines.metricCfg["hrv"],
               let rhrCfg = Baselines.metricCfg["resting_hr"] else { return }
@@ -65,10 +62,22 @@ final class IntelligenceEngine: ObservableObject {
         var dailies: [DailyMetric] = []
         var cachedSleep: [CachedSleepSession] = []
         let sampleLimit = PhoneBudget.intelligenceSampleLimit
+        // Skip nights that already have a recovery score (WHOOP import or a prior
+        // pass). Do not bail out of the whole loop — `repo.today` is the latest
+        // *scored* day, often yesterday after an import, and skipping everything
+        // would leave new strap nights unscored on iPhone.
+        let alreadyScored = PhoneBudget.skipScoringWhenImported
+            ? IntelligenceSkip.scoredDays(in: hist) : []
 
         for offset in 0..<maxDays {
             let dayStart = now - offset * 86_400
             let day = AnalyticsEngine.dayString(dayStart)
+            if PhoneBudget.skipScoringWhenImported {
+                let localDay = Repository.dayString(Date(timeIntervalSince1970: TimeInterval(dayStart)))
+                if IntelligenceSkip.shouldSkip(utcDay: day, localDay: localDay, scored: alreadyScored) {
+                    continue
+                }
+            }
             // Read a generous window around the night that ends on `day`; the stager finds the span.
             let from = dayStart - 30 * 3_600
             let to = dayStart + 12 * 3_600
@@ -98,7 +107,7 @@ final class IntelligenceEngine: ObservableObject {
         if !cachedSleep.isEmpty { _ = try? await store.upsertSleepSessions(cachedSleep, deviceId: computedId) }
 
         results = out
-        note = out.isEmpty
+        note = out.isEmpty && alreadyScored.isEmpty
             ? "No scored nights yet. Wear the strap with NOOP connected overnight and the engine will score your recovery, strain and sleep itself, no WHOOP cloud required."
             : nil
 
@@ -121,5 +130,17 @@ final class IntelligenceEngine: ObservableObject {
                 cont.resume(returning: result)
             }
         }
+    }
+}
+
+/// Pure helpers so a WHOOP import does not re-score nights the CSV already filled,
+/// while nights the import did not cover (new strap data) still get scored.
+enum IntelligenceSkip {
+    static func scoredDays(in days: [DailyMetric]) -> Set<String> {
+        Set(days.compactMap { $0.recovery != nil ? $0.day : nil })
+    }
+
+    static func shouldSkip(utcDay: String, localDay: String, scored: Set<String>) -> Bool {
+        scored.contains(utcDay) || scored.contains(localDay)
     }
 }

@@ -186,7 +186,7 @@ public struct TrendChart: View {
                 }
                 .animation(StrandMotion.fade, value: hoverX)
                 .contentShape(Rectangle())
-                .onContinuousHover(coordinateSpace: .local) { phase in
+                .noopContinuousHover { phase in
                     guard showsHover else { return }
                     switch phase {
                     case .active(let location): hoverX = location.x

@@ -146,7 +146,7 @@ public struct Hypnogram: View {
                 }
                 .animation(StrandMotion.fade, value: hoverIndex)
                 .contentShape(Rectangle())
-                .onContinuousHover(coordinateSpace: .local) { phase in
+                .noopContinuousHover { phase in
                     guard showsHover else { return }
                     switch phase {
                     case .active(let location):

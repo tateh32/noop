@@ -156,7 +156,7 @@ public struct YearHeatStrip: View {
         .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
         .overlay(hoverOverlay(weeks: weeks, gridSize: CGSize(width: gridWidth, height: gridHeight)))
         .contentShape(Rectangle())
-        .onContinuousHover(coordinateSpace: .local) { phase in
+        .noopContinuousHover { phase in
             guard showsHover else { return }
             switch phase {
             case .active(let location):

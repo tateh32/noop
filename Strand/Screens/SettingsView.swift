@@ -71,7 +71,9 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
+                    #if os(macOS)
                     .fixedSize()
+                    #endif
                     .accessibilityLabel("Sex")
                 }
                 rowDivider
@@ -455,6 +457,16 @@ private struct FormRow<Control: View>: View {
     @ViewBuilder var control: () -> Control
 
     var body: some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(StrandFont.body)
+                .foregroundStyle(StrandPalette.textPrimary)
+            control()
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(.vertical, 4)
+        #else
         HStack(alignment: .center, spacing: 16) {
             Text(label)
                 .font(StrandFont.body)
@@ -463,6 +475,7 @@ private struct FormRow<Control: View>: View {
             control()
         }
         .frame(minHeight: 32)
+        #endif
     }
 }
 

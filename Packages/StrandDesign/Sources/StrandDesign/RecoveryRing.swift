@@ -83,7 +83,7 @@ public struct RecoveryRing: View {
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Rectangle())
-        .onContinuousHover(coordinateSpace: .local) { phase in
+        .noopContinuousHover { phase in
             guard showsHover else { return }
             switch phase {
             case .active(let location): hoverPoint = location

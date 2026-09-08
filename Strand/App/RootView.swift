@@ -176,7 +176,8 @@ private struct iPhoneRoot: View {
 
 private struct MoreMenuView: View {
     private var items: [NavItem] {
-        let hide: Set<NavItem> = [.today, .sleep, .trends, .live]
+        // Notifications enumerates Mac apps via NSWorkspace — the iOS screen is a stub.
+        let hide: Set<NavItem> = [.today, .sleep, .trends, .live, .notifications]
         let rest = NavItem.allCases.filter { !hide.contains($0) && $0 != .dataSources }
         return [.dataSources] + rest
     }

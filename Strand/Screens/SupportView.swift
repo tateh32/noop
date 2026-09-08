@@ -21,6 +21,24 @@ struct SupportView: View {
 
     private var contactCard: some View {
         StrandCard(padding: 20) {
+            #if os(iOS)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "envelope.fill").foregroundStyle(StrandPalette.accent).accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Get in touch").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+                        Text("Questions, feedback, bugs — \(ProjectInfo.contactEmail)")
+                            .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Button {
+                    if let url = URL(string: "mailto:\(ProjectInfo.contactEmail)") { PlatformOpen.url(url) }
+                } label: { Label("Email", systemImage: "paperplane.fill") }
+                .buttonStyle(.bordered).tint(StrandPalette.accent)
+                .help("Email \(ProjectInfo.contactEmail)")
+            }
+            #else
             HStack(spacing: 12) {
                 Image(systemName: "envelope.fill").foregroundStyle(StrandPalette.accent).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
@@ -35,6 +53,7 @@ struct SupportView: View {
                 .buttonStyle(.bordered).tint(StrandPalette.accent)
                 .help("Email \(ProjectInfo.contactEmail)")
             }
+            #endif
         }
     }
 
@@ -99,31 +118,42 @@ struct SupportView: View {
                 }
 
                 if let coin = ProjectInfo.donations.first(where: { $0.symbol == selected }) {
+                    #if os(iOS)
+                    VStack(alignment: .leading, spacing: 16) {
+                        qrView(coin.address)
+                        donateAddress(coin)
+                    }
+                    #else
                     HStack(alignment: .top, spacing: 16) {
                         qrView(coin.address)
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Scan with any \(coin.name) wallet")
-                                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
-                            Text(coin.address)
-                                .font(StrandFont.mono(11)).foregroundStyle(StrandPalette.textSecondary)
-                                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                            Button {
-                                PlatformOpen.copy(coin.address)
-                                withAnimation { copied = coin.symbol }
-                            } label: {
-                                Label(copied == coin.symbol ? "Copied!" : "Copy address",
-                                      systemImage: copied == coin.symbol ? "checkmark" : "doc.on.doc")
-                            }
-                            .buttonStyle(.bordered).tint(StrandPalette.accent)
-                            .accessibilityLabel("Copy \(coin.name) address")
-                        }
+                        donateAddress(coin)
                         Spacer(minLength: 0)
                     }
+                    #endif
                 }
 
                 Text("Any amount helps. Thank you — genuinely.")
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
             }
+        }
+    }
+
+    private func donateAddress(_ coin: ProjectInfo.CryptoAddress) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Scan with any \(coin.name) wallet")
+                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
+            Text(coin.address)
+                .font(StrandFont.mono(11)).foregroundStyle(StrandPalette.textSecondary)
+                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            Button {
+                PlatformOpen.copy(coin.address)
+                withAnimation { copied = coin.symbol }
+            } label: {
+                Label(copied == coin.symbol ? "Copied!" : "Copy address",
+                      systemImage: copied == coin.symbol ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.bordered).tint(StrandPalette.accent)
+            .accessibilityLabel("Copy \(coin.name) address")
         }
     }
 

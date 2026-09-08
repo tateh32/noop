@@ -41,6 +41,7 @@ enum PhoneBudget {
     /// Strap log lines kept in LiveState.
     static var liveLogCap: Int { isPhone ? 40 : 200 }
 
-    /// Skip the on-device scorer when a WHOOP import already filled recovery.
+    /// Skip nights that already have a recovery score (import or a prior pass).
+    /// Per-day, not all-or-nothing — new strap nights still get scored.
     static var skipScoringWhenImported: Bool { isPhone }
 }

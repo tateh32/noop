@@ -52,7 +52,7 @@ public struct OnboardingWizard: View {
             VStack(spacing: 0) {
                 // Top chrome: a small back affordance + a step counter.
                 topBar
-                    .padding(.horizontal, 36)
+                    .padding(.horizontal, pageInset)
                     .padding(.top, 28)
 
                 // The paged content.
@@ -73,11 +73,11 @@ public struct OnboardingWizard: View {
                 .frame(maxWidth: 620, maxHeight: .infinity)
                 .transition(stepTransition)
                 .id(step)                       // re-runs the transition per step
-                .padding(.horizontal, 40)
+                .padding(.horizontal, pageInset)
 
                 // Bottom: the thread (progress) + the forward CTA.
                 bottomBar
-                    .padding(.horizontal, 40)
+                    .padding(.horizontal, pageInset)
                     .padding(.bottom, 36)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -89,6 +89,15 @@ public struct OnboardingWizard: View {
         // Isolated live observation — a hidden watcher slides Scan → celebration on bond
         // without subscribing the whole wizard to per-tick updates.
         .background(BondWatcher(onBonded: handleBond))
+    }
+
+    /// 40pt side padding is Mac chrome; on a 390pt phone it steals too much of the step.
+    private var pageInset: CGFloat {
+        #if os(iOS)
+        20
+        #else
+        40
+        #endif
     }
 
     private func handleBond() {
@@ -107,9 +116,9 @@ public struct OnboardingWizard: View {
                 startRadius: 40,
                 endRadius: glow ? 620 : 480
             )
-            .blendMode(.plusLighter)
+            .blendMode(StrandPerf.reducedEffects ? .normal : .plusLighter)
             .opacity(glow ? 0.9 : 0.6)
-            .animation(StrandMotion.breathe, value: glow)
+            .animation(StrandPerf.reducedEffects ? nil : StrandMotion.breathe, value: glow)
             .ignoresSafeArea()
 
             // A faint indigo wash from the top — instrument-grade depth.
@@ -1048,7 +1057,7 @@ private struct PrimaryButton: View {
 
 private struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        Group { configuration.label }
             .frame(maxWidth: .infinity)
             .foregroundStyle(Color.white)
             .padding(.vertical, 14)

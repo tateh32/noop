@@ -81,8 +81,13 @@ final class AppModel: ObservableObject {
             let firstDelay: UInt64 = PhoneBudget.isPhone ? 20_000_000_000 : 6_000_000_000
             try? await Task.sleep(nanoseconds: firstDelay)
             while !Task.isCancelled {
-                await self.intelligence.analyzeRecent()
-                try? await Task.sleep(nanoseconds: 900_000_000_000)  // 15 min, matches the offload cadence
+                // Don't score during first-run onboarding — the wizard is already animating.
+                if UserDefaults.standard.bool(forKey: "noop.onboarded") {
+                    await self.intelligence.analyzeRecent()
+                    try? await Task.sleep(nanoseconds: 900_000_000_000)  // 15 min, matches the offload cadence
+                } else {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                }
             }
         }
     }
@@ -273,7 +278,7 @@ final class AppModel: ObservableObject {
         importSummary = nil
         Task {
             do {
-                let local = try ImportStaging.copyIntoInbox(url)
+                let local = try await ImportStaging.copyIntoInbox(url)
                 defer { try? FileManager.default.removeItem(at: local) }
                 guard let store = await repo.storeHandle() else {
                     importSummary = "Couldn't open the local store."; importing = false; return
@@ -316,7 +321,7 @@ final class AppModel: ObservableObject {
         importSummary = nil
         Task {
             do {
-                let local = try ImportStaging.copyIntoInbox(url)
+                let local = try await ImportStaging.copyIntoInbox(url)
                 defer { try? FileManager.default.removeItem(at: local) }
                 guard let store = await repo.storeHandle() else {
                     importSummary = "Couldn't open the local store."; importing = false; return
