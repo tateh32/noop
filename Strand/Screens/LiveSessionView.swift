@@ -10,7 +10,23 @@ struct LiveSessionView: View {
     var onSaved: (() -> Void)? = nil
 
     var body: some View {
+        #if os(iOS)
         RecorderBody(session: model.session, onSaved: onSaved)
+            .navigationTitle("Train")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink {
+                        LiveView()
+                    } label: {
+                        Label("Strap", systemImage: "waveform.path.ecg")
+                    }
+                    .accessibilityLabel("WHOOP strap live heart rate")
+                }
+            }
+        #else
+        RecorderBody(session: model.session, onSaved: onSaved)
+        #endif
     }
 }
 
@@ -24,7 +40,7 @@ private struct RecorderBody: View {
     @State private var saving = false
 
     var body: some View {
-        ScreenScaffold(title: "Live session",
+        ScreenScaffold(title: "Train",
                        subtitle: session.running ? "In progress — keep the phone with you." : "Start, move, stop. Saved to your log.") {
             if session.running {
                 liveCard
@@ -33,11 +49,14 @@ private struct RecorderBody: View {
                 stopRow
             } else {
                 DataPendingNote(
-                    title: "Phone GPS. Strap HR. No Apple Watch.",
-                    message: "Running, walking, cycling and hiking use this iPhone’s GPS for distance. Heart rate comes from the WHOOP strap if it is bonded on Live. An Apple Watch is not connected — there is no Watch app and no live HealthKit.",
+                    title: "This is Start / Stop. Phone GPS. Strap HR.",
+                    message: "Tap Start session below. Running, walking, cycling and hiking use this iPhone’s GPS. Heart rate comes from the WHOOP strap if it is bonded — Strap in the top right, or More → Live. An Apple Watch is not connected.",
                     symbol: "figure.run")
                 setupCard
                 startButton
+                #if os(iOS)
+                strapLink
+                #endif
             }
             if let err = session.error {
                 Text(err)
@@ -93,15 +112,44 @@ private struct RecorderBody: View {
             if live.bonded { model.startRealtimeHR() }
             session.start(sport: session.sport, hr: { model.bpm }, profile: model.profile)
         } label: {
-            Label("Start session", systemImage: "play.fill")
-                .font(StrandFont.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+            LiveSessionPaintedLabel(title: "Start session", systemImage: "play.fill")
         }
-        .buttonStyle(.borderedProminent)
-        .tint(StrandPalette.accent)
+        .buttonStyle(.plain)
         .accessibilityLabel("Start live workout session")
     }
+
+    #if os(iOS)
+    private var strapLink: some View {
+        NavigationLink {
+            LiveView()
+        } label: {
+            NoopCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(StrandPalette.accent)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("WHOOP strap")
+                            .font(StrandFont.headline)
+                            .foregroundStyle(StrandPalette.textPrimary)
+                        Text(live.bonded ? "Bonded — heart rate will record" : "Not bonded — tap to scan & connect")
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(StrandPalette.textTertiary)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open WHOOP strap live heart rate")
+    }
+    #endif
 
     private var liveCard: some View {
         NoopCard {
@@ -231,3 +279,55 @@ struct LiveSessionEntryLink: View {
         .accessibilityLabel("Start a live workout session")
     }
 }
+
+/// Filled accent control. `NavigationLink` + `.borderedProminent` can render empty on iOS 16.
+struct LiveSessionPaintedLabel: View {
+    var title: String
+    var systemImage: String = "play.fill"
+    @Environment(\.noopAppearance) private var appearance
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+            Text(title)
+        }
+        .font(StrandFont.headline)
+        .foregroundStyle(appearance.isGlass ? Color.black.opacity(0.85) : Color.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(appearance.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+#if os(iOS)
+/// Always-on Today bar: painted label, not `borderedProminent`, so it cannot collapse to zero size.
+struct LiveSessionDock: View {
+    @EnvironmentObject var model: AppModel
+    var onSaved: (() -> Void)? = nil
+
+    var body: some View {
+        LiveSessionDockInner(session: model.session, onSaved: onSaved)
+    }
+}
+
+private struct LiveSessionDockInner: View {
+    @ObservedObject var session: LiveSessionRecorder
+    var onSaved: (() -> Void)? = nil
+
+    var body: some View {
+        NavigationLink {
+            LiveSessionView(onSaved: onSaved)
+        } label: {
+            LiveSessionPaintedLabel(
+                title: session.running ? "Session running · \(session.elapsedLabel)" : "Start live session",
+                systemImage: session.running ? "record.circle" : "play.fill")
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+        .background(.ultraThinMaterial)
+        .accessibilityLabel(session.running ? "Open running live session" : "Start live session")
+    }
+}
+#endif

@@ -13,7 +13,8 @@ import Foundation
 // Composition (top → bottom):
 //   (a) HERO  — full-width HStack that fills the width EQUALLY: RecoveryRing (left card)
 //               + InsightCard "Today's Synthesis" (right card). No lone card, no gap.
-//   (b) TRAIN (iPhone, top of Today) — Live session, Log a session, Breathe, Intervals, History, Current.
+//   (b) TRAIN (iPhone) — Breathe, Intervals, History, Current, Live session row.
+//       Start / Stop is the Train tab + a Start bar pinned to the bottom of Today.
 //   (c) METRICS — one adaptive LazyVGrid of fixed-104pt StatTiles (Recovery, Strain,
 //               Sleep, HRV, RHR, SpO2, Respiratory, Steps, Weight, Calories) each with
 //               a 14-day sparkline so the grid tiles perfectly with no empty cells.
@@ -86,6 +87,9 @@ struct TodayView: View {
                     }
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            LiveSessionDock { Task { await reloadWorkouts() } }
+        }
         #else
         .overlay {
             if showingSupport {
@@ -100,7 +104,6 @@ struct TodayView: View {
     private var todaySections: some View {
         HealthAlertBanner()
         #if os(iOS)
-        startLiveSessionButton
         trainSection
         #endif
         if repo.days.isEmpty {
@@ -327,24 +330,10 @@ struct TodayView: View {
     // Mac keeps these in the sidebar; More on iPhone was too deep and too cramped.
 
     #if os(iOS)
-    private var startLiveSessionButton: some View {
-        NavigationLink {
-            LiveSessionView { Task { await reloadWorkouts() } }
-        } label: {
-            Label("Start live session", systemImage: "play.fill")
-                .font(StrandFont.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(StrandPalette.accent)
-        .accessibilityLabel("Start live session")
-    }
-
     @ViewBuilder
     private var trainSection: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Train", overline: "Work",
+            SectionHeader("Train", overline: "Tab bar · Train",
                           trailing: workoutsToday.isEmpty ? "No session today" : "\(workoutsToday.count) today")
             LiveSessionEntryLink {
                 Task { await reloadWorkouts() }

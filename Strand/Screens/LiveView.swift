@@ -20,23 +20,15 @@ struct LiveView: View {
 
     var body: some View {
         ScreenScaffold(title: "Live",
-                       subtitle: "Your strap in real time — heart rate and frames as they arrive.") {
+                       subtitle: "Strap heart rate. Start / Stop a workout is the Train tab.") {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
-                connectionRow
                 #if os(iOS)
-                NavigationLink {
-                    LiveSessionView()
-                } label: {
-                    Label("Start live session", systemImage: "play.fill")
-                        .font(StrandFont.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(StrandPalette.accent)
-                .accessibilityLabel("Start live session")
-                LiveSessionEntryLink()
+                DataPendingNote(
+                    title: "Looking for Start / Stop?",
+                    message: "That’s the Train tab — the running figure at the bottom of the screen. This page is the WHOOP strap.",
+                    symbol: "figure.run")
                 #endif
+                connectionRow
                 heartRateCard
                 statusGrid
                 if !live.bonded { modelPicker }
@@ -46,7 +38,7 @@ struct LiveView: View {
         }
         .onAppear { if live.bonded { model.startRealtimeHR(); model.getBattery() } }
         .onDisappear {
-            // A live workout still needs the HR stream if the user left this tab.
+            // A live workout still needs the HR stream if the user left this screen.
             if !model.session.running { model.stopRealtimeHR() }
         }
         .onChange(of: live.bonded) { bonded in

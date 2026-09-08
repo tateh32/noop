@@ -17,6 +17,31 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+---
+
+## 1.3.7 — Train is a tab (Start / Stop)
+
+The Start / Stop workout was easy to miss: the **Live** tab is strap heart rate,
+not a workout, and a `NavigationLink` styled `.borderedProminent` can draw as
+empty on iOS 16.
+
+- **Train** is a bottom tab (running figure). That screen *is* Start session /
+  Stop and save. First launch of this build opens Train so you land on it.
+- Strap pairing is **Strap** (top right on Train) or **More → Live**.
+- Today keeps a **Start live session** bar pinned above the tab bar, plus the
+  Train section. More still has **Live session** as the first row.
+- You will not see this until you **`git pull`** this branch and rebuild. Checkout
+  does not download new commits.
+
+```bash
+git checkout cursor/ios-train-explore-layout-8abc
+git checkout -- StrandiOS/Resources/Info.plist   # if Xcode dirtied it
+git pull origin cursor/ios-train-explore-layout-8abc
+xcodegen generate
+```
+
+Scheme **NOOPiOS**, then set bundle ID back to `com.t8o.noop` if generate reset it.
+
 ## 1.3.6 — Train on Today, Explore stays put, workout log fits
 
 iPhone layout pass for the workout log and Explore, plus a home for training
@@ -30,10 +55,9 @@ tools that were buried under More.
 - **Breathe, Intervals, and Workouts** move from More onto Today as a **Train**
   section, with a **Live session** (Start / Stop), **Log a session** (after the
   fact), **Current**, and **History**.
-- **Live session** is the first card on **Today** (Train) and also on the **Live**
-  tab. Start / Stop records duration. Running / walking / cycling / hiking use
-  **iPhone GPS**. Heart rate comes from the **WHOOP strap** if it is bonded.
-  There is no Apple Watch app and no live HealthKit.
+- **Live session** is a blue **Start live session** button at the top of **Today**,
+  a play icon in Today’s toolbar, the first row in **More**, and a button on the
+  **Live** tab. You must `git pull` this branch — checkout alone does not update.
 - Strap-detected bouts persist after a scored night. Phone-logged sessions always stay.
 - Breathing Start / Test buzz and interval steppers wrap on a phone.
 
