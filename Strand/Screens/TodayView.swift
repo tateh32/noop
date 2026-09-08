@@ -13,11 +13,12 @@ import Foundation
 // Composition (top → bottom):
 //   (a) HERO  — full-width HStack that fills the width EQUALLY: RecoveryRing (left card)
 //               + InsightCard "Today's Synthesis" (right card). No lone card, no gap.
-//   (b) METRICS — one adaptive LazyVGrid of fixed-104pt StatTiles (Recovery, Strain,
+//   (b) TRAIN (iPhone) — Breathe, Intervals, Workouts, Current session.
+//   (c) METRICS — one adaptive LazyVGrid of fixed-104pt StatTiles (Recovery, Strain,
 //               Sleep, HRV, RHR, SpO2, Respiratory, Steps, Weight, Calories) each with
 //               a 14-day sparkline so the grid tiles perfectly with no empty cells.
-//   (c) LAST WORKOUTS — the SAME adaptive grid of fixed-104pt workout StatTiles.
-//   (d) DATA SOURCES — one full-width NoopCard footer of SourceBadges + counts.
+//   (d) LAST WORKOUTS — the SAME adaptive grid of fixed-104pt workout StatTiles.
+//   (e) DATA SOURCES — one full-width NoopCard footer of SourceBadges + counts.
 //
 // Sparse series (weight) fall back to ALL history so a tile never shows an empty
 // state when data exists. Only locked StrandDesign components are used.
@@ -103,6 +104,9 @@ struct TodayView: View {
         }
         heroSection
         readinessSection
+        #if os(iOS)
+        trainSection
+        #endif
         metricsSection
         workoutsSection
         sourcesSection
@@ -308,6 +312,71 @@ struct TodayView: View {
         }
     }
 
+    // MARK: Train — Breathe / Intervals / Workouts / Current (iPhone).
+    // Mac keeps these in the sidebar; More on iPhone was too deep and too cramped.
+
+    #if os(iOS)
+    @ViewBuilder
+    private var trainSection: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            SectionHeader("Train", overline: "Work",
+                          trailing: workoutsToday.isEmpty ? "No session today" : "\(workoutsToday.count) today")
+            LazyVGrid(columns: grid, alignment: .leading, spacing: NoopMetrics.gap) {
+                NavigationLink {
+                    BreathingView()
+                } label: {
+                    StatTile(label: "Breathe", value: "Session", caption: "Haptic pace",
+                             accent: StrandPalette.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Breathe session")
+
+                NavigationLink {
+                    IntervalTimerView()
+                } label: {
+                    StatTile(label: "Intervals", value: "Timer", caption: "Strap buzzes",
+                             accent: StrandPalette.metricCyan)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Interval timer")
+
+                NavigationLink {
+                    WorkoutsView()
+                } label: {
+                    StatTile(label: "Workouts", value: workouts.isEmpty ? "Log" : "\(workouts.count)",
+                             caption: "All sessions",
+                             accent: StrandPalette.textPrimary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("All workout sessions")
+
+                currentSessionLink
+            }
+        }
+    }
+
+    private var currentSessionLink: some View {
+        let todayRows = workoutsToday
+        let latest = todayRows.first ?? workouts.first
+        let label = todayRows.isEmpty ? "Latest" : "Current"
+        let value = latest.map(workoutDuration) ?? "—"
+        let caption: String = {
+            guard let w = latest else { return "No sessions yet" }
+            return todayRows.isEmpty ? workoutCaption(w) : w.sport
+        }()
+        return NavigationLink {
+            CurrentWorkoutsView()
+        } label: {
+            StatTile(label: label, value: value, caption: caption,
+                     accent: StrandPalette.strainColor(latest?.strain ?? 8),
+                     delta: todayRows.isEmpty ? nil : "today",
+                     deltaColor: StrandPalette.metricAmber)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(label) workout")
+    }
+    #endif
+
     // MARK: (c) LAST WORKOUTS — SAME grid, uniform 104pt workout tiles.
 
     @ViewBuilder
@@ -351,7 +420,7 @@ struct TodayView: View {
                         badge: "Apple Health",
                         tint: StrandPalette.metricCyan,
                         present: !appleDays.isEmpty,
-                        detail: "\(appleDays.count) days · \(workouts.filter { $0.source == "apple-health" }.count) workouts"
+                        detail: "\(appleDays.count) days · \(workouts.filter { $0.source.lowercased().contains("apple") }.count) workouts"
                     )
                 }
             }
@@ -513,6 +582,13 @@ struct TodayView: View {
         if let kcal = a?.activeKcal { return intString(kcal) }
         return latestString("active_kcal", decimals: 0)
     }
+
+    #if os(iOS)
+    private var workoutsToday: [WorkoutRow] {
+        let lo = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)
+        return workouts.filter { $0.startTs >= lo }
+    }
+    #endif
 
     private func workoutDuration(_ w: WorkoutRow) -> String {
         let secs = w.durationS ?? Double(max(w.endTs - w.startTs, 0))

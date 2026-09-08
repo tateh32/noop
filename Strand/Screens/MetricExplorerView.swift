@@ -110,8 +110,15 @@ struct MetricExplorerView: View {
     @State private var emptyByID: [String: Bool] = [:]
 
     var body: some View {
-        NavigationStack {
-            ScreenScaffold(title: "Explore", subtitle: "Every signal, one tap deep.") {
+        #if os(iOS)
+        explorer
+        #else
+        NavigationStack { explorer }
+        #endif
+    }
+
+    private var explorer: some View {
+        ScreenScaffold(title: "Explore", subtitle: "Every signal, one tap deep.") {
                 ForEach(MetricCatalog.categories, id: \.self) { category in
                     let metrics = MetricCatalog.inCategory(category)
                     if !metrics.isEmpty {
@@ -141,8 +148,7 @@ struct MetricExplorerView: View {
             .navigationDestination(for: MetricDescriptor.self) { metric in
                 MetricDetailView(metric: metric)
             }
-        }
-        .task { await probeEmptiness() }
+            .task { await probeEmptiness() }
     }
 
     /// One lightweight pass to learn which metrics have no series, so rows can flag
@@ -151,7 +157,7 @@ struct MetricExplorerView: View {
         guard emptyByID.isEmpty else { return }
         var map: [String: Bool] = [:]
         for metric in MetricCatalog.all {
-            let s = await repo.series(key: metric.key, source: metric.source)
+            let s = await repo.series(key: metric.key, source: metric.source, days: PhoneBudget.dashboardDays)
             map[metric.id] = s.isEmpty
         }
         emptyByID = map
@@ -325,10 +331,10 @@ struct MetricDetailView: View {
     }
 
     private func load() async {
-        series = await repo.series(key: metric.key, source: metric.source)
+        series = await repo.series(key: metric.key, source: metric.source, days: PhoneBudget.dashboardDays)
         var loadedOthers: [(metric: MetricDescriptor, series: [(day: String, value: Double)])] = []
         for other in MetricCatalog.all where other.id != metric.id {
-            let s = await repo.series(key: other.key, source: other.source)
+            let s = await repo.series(key: other.key, source: other.source, days: PhoneBudget.dashboardDays)
             if !s.isEmpty { loadedOthers.append((other, s)) }
         }
         others = loadedOthers
@@ -346,6 +352,18 @@ struct MetricDetailView: View {
                                    windowed: windowed,
                                    windowFellBack: windowFellBack)
         return VStack(alignment: .leading, spacing: 8) {
+            #if os(iOS)
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(metric.category.uppercased()).strandOverline()
+                    Text(metric.title)
+                        .font(StrandFont.title2)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                SegmentedPillControl(ExploreRange.allCases, selection: $range) { $0.label }
+            }
+            #else
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(metric.category.uppercased()).strandOverline()
@@ -356,6 +374,7 @@ struct MetricDetailView: View {
                 Spacer()
                 SegmentedPillControl(ExploreRange.allCases, selection: $range) { $0.label }
             }
+            #endif
             Text(caption)
                 .font(StrandFont.footnote)
                 .foregroundStyle(windowFellBack ? StrandPalette.statusWarning : StrandPalette.textTertiary)

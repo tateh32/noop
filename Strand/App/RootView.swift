@@ -207,7 +207,9 @@ private struct GlassTabChrome: ViewModifier {
 private struct MoreMenuView: View {
     private var items: [NavItem] {
         // Notifications enumerates Mac apps via NSWorkspace — the iOS screen is a stub.
-        let hide: Set<NavItem> = [.today, .sleep, .trends, .live, .notifications]
+        // Breathe / Intervals / Workouts live on Today → Train on iPhone.
+        let hide: Set<NavItem> = [.today, .sleep, .trends, .live, .notifications,
+                                  .breathe, .intervals, .workouts]
         let rest = NavItem.allCases.filter { !hide.contains($0) && $0 != .dataSources }
         return [.dataSources] + rest
     }

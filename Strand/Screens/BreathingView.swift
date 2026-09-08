@@ -248,31 +248,42 @@ struct BreathingView: View {
     // MARK: - Controls
 
     private var controlRow: some View {
-        HStack(spacing: 12) {
-            Button {
-                running ? stop() : start()
-            } label: {
-                Label(running ? "Stop session" : "Start session",
-                      systemImage: running ? "stop.fill" : "play.fill")
-                    .font(StrandFont.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(running ? StrandPalette.statusCritical : StrandPalette.accent)
-
-            Button {
-                model.buzz(loops: 1)
-            } label: {
-                Label("Test buzz", systemImage: "waveform.path")
-                    .font(StrandFont.body)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 8)
-            }
-            .buttonStyle(.bordered)
-            .disabled(!live.bonded)
-            .help("Fire a single haptic pulse on the strap (requires a bonded connection)")
+        let startButton = Button {
+            running ? stop() : start()
+        } label: {
+            Label(running ? "Stop session" : "Start session",
+                  systemImage: running ? "stop.fill" : "play.fill")
+                .font(StrandFont.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
         }
+        .buttonStyle(.borderedProminent)
+        .tint(running ? StrandPalette.statusCritical : StrandPalette.accent)
+
+        let buzzButton = Button {
+            model.buzz(loops: 1)
+        } label: {
+            Label("Test buzz", systemImage: "waveform.path")
+                .font(StrandFont.body)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 8)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!live.bonded)
+        .help("Fire a single haptic pulse on the strap (requires a bonded connection)")
+
+        #if os(iOS)
+        VStack(spacing: 12) {
+            startButton
+            buzzButton
+        }
+        #else
+        HStack(spacing: 12) {
+            startButton
+            buzzButton
+        }
+        #endif
     }
 
     // MARK: - Readouts

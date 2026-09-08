@@ -184,14 +184,30 @@ final class Repository: ObservableObject {
             to: Self.dayString(now.addingTimeInterval(86_400)))) ?? []
     }
 
-    /// All workouts (Whoop + Apple Health), newest first.
+    /// All workouts (Whoop + Apple Health + on-device detections), newest first.
     func workoutRows(days: Int = 4000) async -> [WorkoutRow] {
         guard let store = await ensureStore() else { return [] }
         let now = Int(Date().timeIntervalSince1970)
         let lo = now - days * 86_400, hi = now + 86_400
-        var rows = (try? await store.workouts(deviceId: deviceId, from: lo, to: hi, limit: 5000)) ?? []
-        rows += (try? await store.workouts(deviceId: "apple-health", from: lo, to: hi, limit: 5000)) ?? []
-        return rows.sorted { $0.startTs > $1.startTs }
+        let imported = (try? await store.workouts(deviceId: deviceId, from: lo, to: hi, limit: 5000)) ?? []
+        let apple = (try? await store.workouts(deviceId: "apple-health", from: lo, to: hi, limit: 5000)) ?? []
+        let computed = (try? await store.workouts(deviceId: computedDeviceId, from: lo, to: hi, limit: 5000)) ?? []
+        return Self.mergeWorkouts(imported: imported, apple: apple, computed: computed)
+    }
+
+    /// Imported WHOOP and Apple Health rows win when they overlap a strap-detected bout.
+    static func mergeWorkouts(imported: [WorkoutRow], apple: [WorkoutRow],
+                              computed: [WorkoutRow]) -> [WorkoutRow] {
+        let preferred = imported + apple
+        var out = preferred
+        for row in computed where !preferred.contains(where: { workoutsOverlap($0, row) }) {
+            out.append(row)
+        }
+        return out.sorted { $0.startTs > $1.startTs }
+    }
+
+    static func workoutsOverlap(_ a: WorkoutRow, _ b: WorkoutRow) -> Bool {
+        a.startTs < b.endTs && b.startTs < a.endTs
     }
 
     /// Apple Health daily aggregates (steps/energy/vo2/hr).
