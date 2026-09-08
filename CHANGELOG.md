@@ -17,6 +17,18 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.3.5 — Today stays on today after a WHOOP import
+
+Importing a WHOOP zip used to rewrite the Control Center date as the latest
+*scored* cycle. If that cycle was 8 April (or later rows used fractional
+timestamps we didn't parse), the home screen said April 8th instead of today.
+
+- The subtitle is always **today's calendar date**.
+- If the ring is an older export day, a note says so instead of pretending it's this morning.
+- WHOOP timestamps with fractional seconds (`…06:14:32.379124+00:00`) import instead of being dropped.
+
+Rebuild scheme **NOOPiOS** from this branch after `xcodegen generate`. If April 8 was wrong (the zip should include later days), Data Sources → Start over, then import a fresh zip.
+
 ## 1.3.4 — Glass look, Classic still one tap away
 
 Liquid Glass / Health-style cards on iPhone, without throwing the original

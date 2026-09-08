@@ -39,6 +39,36 @@ final class Repository: ObservableObject {
     /// The trailing 7 days (for the week strip), oldest→newest.
     var week: [DailyMetric] { Array(days.suffix(7)) }
 
+    /// Device-calendar `yyyy-MM-dd` for `date`. Imported WHOOP days use the cycle
+    /// timezone; this is the civil date on the phone, used to keep the Today
+    /// subtitle on *today* even when the latest scored cycle is older.
+    static func calendarDay(of date: Date = Date()) -> String { dayString(date) }
+
+    static func isCalendarToday(_ ymd: String) -> Bool { ymd == calendarDay() }
+
+    /// Whole local calendar days from `ymd` until `date`. Positive means `ymd` is in the past.
+    static func calendarDaysAgo(_ ymd: String, from date: Date = Date()) -> Int? {
+        guard let then = civilDate(ymd) else { return nil }
+        let cal = Calendar.current
+        return cal.dateComponents([.day], from: cal.startOfDay(for: then), to: cal.startOfDay(for: date)).day
+    }
+
+    /// Interpret `yyyy-MM-dd` as a local civil date (not UTC midnight).
+    static func civilDate(_ ymd: String) -> Date? {
+        let p = ymd.split(separator: "-")
+        guard p.count == 3,
+              let y = Int(p[0]), let m = Int(p[1]), let d = Int(p[2]) else { return nil }
+        return Calendar.current.date(from: DateComponents(year: y, month: m, day: d))
+    }
+
+    static func prettyDay(_ ymd: String) -> String? {
+        guard let date = civilDate(ymd) else { return nil }
+        let f = DateFormatter()
+        f.locale = .current
+        f.setLocalizedDateFormatFromTemplate("dMMM")
+        return f.string(from: date)
+    }
+
     private func ensureStore() async -> WhoopStore? {
         if let store { return store }
         guard let path = try? StorePaths.defaultDatabasePath() else { return nil }

@@ -329,36 +329,70 @@ enum WhoopTime {
         return sign * (hours * 60 + minutes)
     }
 
-    /// Parse a Whoop CSV timestamp `YYYY-MM-DD HH:MM:SS` interpreted in the
-    /// timezone given by `offsetMinutes`, returning a UTC `Date`.
+    /// Parse a Whoop CSV timestamp interpreted in `offsetMinutes`, returning UTC.
     ///
-    /// Some exports already include an offset inside the timestamp itself
-    /// (e.g. `2024-01-02 03:04:05+0000`); when present that wins.
+    /// Real exports mix several shapes: `YYYY-MM-DD HH:MM:SS`, a `T` separator,
+    /// fractional seconds (`.379124`), and an offset on the stamp itself
+    /// (`+00:00`, `Z`). Rows that fail to parse used to be dropped — which made
+    /// Today freeze on the last old-format day (often months ago).
     static func parse(_ raw: String?, offsetMinutes: Int) -> Date? {
-        guard let s0 = raw?.trimmingCharacters(in: .whitespaces), !s0.isEmpty else { return nil }
+        guard let s0 = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !s0.isEmpty else { return nil }
+        if let d = parseISO(s0) { return d }
 
-        // 1) ISO-8601 with embedded offset (e.g. "...T...Z", "...+01:00").
-        if let d = isoFormatter.date(from: s0) { return d }
-        if let d = isoFormatterFractional.date(from: s0) { return d }
+        let noFrac = stripFractionalSeconds(s0)
+        if noFrac != s0, let d = parseISO(noFrac) { return d }
 
-        // 2) Plain "YYYY-MM-DD HH:MM:SS" or with a 'T'.
-        let normalized = s0.replacingOccurrences(of: "T", with: " ")
-        // Reuse one formatter (allocating a DateFormatter per CSV row was a measurable cost on
-        // imports with tens of thousands of rows). Imports run on a single thread, so the shared
-        // mutable formatter is safe; only timeZone/dateFormat are set per parse.
+        let (body, embedded) = splitEmbeddedOffset(noFrac.replacingOccurrences(of: "T", with: " "))
+        let tzMin = embedded ?? offsetMinutes
         let fmt = plainFormatter
-        fmt.timeZone = TimeZone(secondsFromGMT: offsetMinutes * 60) ?? TimeZone(identifier: "UTC")!
+        fmt.timeZone = TimeZone(secondsFromGMT: tzMin * 60) ?? TimeZone(identifier: "UTC")!
         for pattern in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd"] {
             fmt.dateFormat = pattern
-            if let d = fmt.date(from: normalized) { return d }
+            if let d = fmt.date(from: body) { return d }
         }
         return nil
+    }
+
+    private static func parseISO(_ s: String) -> Date? {
+        if let d = isoFormatter.date(from: s) { return d }
+        if let d = isoFormatterFractional.date(from: s) { return d }
+        if s.contains(" ") {
+            let t = s.replacingOccurrences(of: " ", with: "T")
+            if let d = isoFormatter.date(from: t) { return d }
+            if let d = isoFormatterFractional.date(from: t) { return d }
+        }
+        return nil
+    }
+
+    /// `2026-04-08 06:00:00.379124+00:00` → `2026-04-08 06:00:00+00:00`
+    static func stripFractionalSeconds(_ s: String) -> String {
+        guard let dot = s.firstIndex(of: ".") else { return s }
+        let after = s[s.index(after: dot)...]
+        let digits = after.prefix(while: { $0.isNumber })
+        guard !digits.isEmpty else { return s }
+        return String(s[..<dot]) + after.dropFirst(digits.count)
+    }
+
+    /// Pull a trailing `Z` / `+00:00` / `-0500` off a stamp. Date dashes are ignored.
+    static func splitEmbeddedOffset(_ s: String) -> (String, Int?) {
+        let trimmed = s.trimmingCharacters(in: .whitespaces)
+        if trimmed.uppercased().hasSuffix("Z"), trimmed.count > 16 {
+            return (String(trimmed.dropLast()).trimmingCharacters(in: .whitespaces), 0)
+        }
+        if let idx = trimmed.lastIndex(where: { $0 == "+" || $0 == "-" }), idx > trimmed.startIndex {
+            let prefix = String(trimmed[..<idx])
+            if prefix.contains(":") {
+                return (prefix.trimmingCharacters(in: .whitespaces), tzOffsetMinutes(String(trimmed[idx...])))
+            }
+        }
+        return (trimmed, nil)
     }
 
     private static let plainFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.calendar = Calendar(identifier: .gregorian)
+        f.isLenient = false
         return f
     }()
 

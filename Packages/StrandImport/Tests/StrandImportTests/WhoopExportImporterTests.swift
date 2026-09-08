@@ -50,6 +50,32 @@ final class WhoopExportImporterTests: XCTestCase {
         XCTAssertEqual(d2, Fixtures.utc(2024, 1, 3, 5, 5, 0))
     }
 
+    func testTimestampWithFractionalSecondsAndOffset() {
+        // WHOOP started emitting `.microseconds+00:00`. Dropping those rows left
+        // Today stuck on the last old-format day.
+        let d = WhoopTime.parse("2026-09-07 06:14:32.379124+00:00", offsetMinutes: 0)
+        XCTAssertEqual(d?.timeIntervalSince1970 ?? 0,
+                       Fixtures.utc(2026, 9, 7, 6, 14, 32).timeIntervalSince1970, accuracy: 1)
+
+        let z = WhoopTime.parse("2026-09-08T06:01:00.001Z", offsetMinutes: 0)
+        XCTAssertEqual(z?.timeIntervalSince1970 ?? 0,
+                       Fixtures.utc(2026, 9, 8, 6, 1, 0).timeIntervalSince1970, accuracy: 1)
+    }
+
+    func testCyclesWithFractionalTimestampsAreNotDropped() {
+        let csv = """
+        Cycle timezone,Recovery score %,Cycle start time,Cycle end time
+        UTC+00:00,81,2026-09-07 06:14:32.379124+00:00,2026-09-08 06:01:00.001+00:00
+        """
+        let rows = WhoopExportImporter().parseCycles(CSVTable(text: csv))
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].recoveryScore, 81)
+        XCTAssertEqual(rows[0].cycleStart?.timeIntervalSince1970 ?? 0,
+                       Fixtures.utc(2026, 9, 7, 6, 14, 32).timeIntervalSince1970, accuracy: 1)
+        XCTAssertEqual(rows[0].cycleEnd?.timeIntervalSince1970 ?? 0,
+                       Fixtures.utc(2026, 9, 8, 6, 1, 0).timeIntervalSince1970, accuracy: 1)
+    }
+
     // MARK: - physiological_cycles.csv
 
     func testCyclesParseToExpectedValues() throws {
