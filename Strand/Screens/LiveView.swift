@@ -24,6 +24,17 @@ struct LiveView: View {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                 connectionRow
                 #if os(iOS)
+                NavigationLink {
+                    LiveSessionView()
+                } label: {
+                    Label("Start live session", systemImage: "play.fill")
+                        .font(StrandFont.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(StrandPalette.accent)
+                .accessibilityLabel("Start live session")
                 LiveSessionEntryLink()
                 #endif
                 heartRateCard

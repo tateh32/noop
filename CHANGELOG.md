@@ -34,6 +34,8 @@ tools that were buried under More.
   tab. Start / Stop records duration. Running / walking / cycling / hiking use
   **iPhone GPS**. Heart rate comes from the **WHOOP strap** if it is bonded.
   There is no Apple Watch app and no live HealthKit.
+- Strap-detected bouts persist after a scored night. Phone-logged sessions always stay.
+- Breathing Start / Test buzz and interval steppers wrap on a phone.
 
 Rebuild scheme **NOOPiOS** from this branch. You must **pull**, not only checkout:
 

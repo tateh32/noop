@@ -64,6 +64,16 @@ struct TodayView: View {
                 .help("Support NOOP — donate or get in touch")
                 .accessibilityLabel("Support NOOP — donate or get in touch")
             }
+            #if os(iOS)
+            ToolbarItem(placement: .navigationBarLeading) {
+                NavigationLink {
+                    LiveSessionView { Task { await reloadWorkouts() } }
+                } label: {
+                    Image(systemName: "play.circle.fill")
+                }
+                .accessibilityLabel("Start live session")
+            }
+            #endif
         }
         #if os(iOS)
         .sheet(isPresented: $showingSupport) {
@@ -90,6 +100,7 @@ struct TodayView: View {
     private var todaySections: some View {
         HealthAlertBanner()
         #if os(iOS)
+        startLiveSessionButton
         trainSection
         #endif
         if repo.days.isEmpty {
@@ -316,6 +327,20 @@ struct TodayView: View {
     // Mac keeps these in the sidebar; More on iPhone was too deep and too cramped.
 
     #if os(iOS)
+    private var startLiveSessionButton: some View {
+        NavigationLink {
+            LiveSessionView { Task { await reloadWorkouts() } }
+        } label: {
+            Label("Start live session", systemImage: "play.fill")
+                .font(StrandFont.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(StrandPalette.accent)
+        .accessibilityLabel("Start live session")
+    }
+
     @ViewBuilder
     private var trainSection: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {

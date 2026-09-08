@@ -199,17 +199,6 @@ private struct RecorderBody: View {
 struct LiveSessionEntryLink: View {
     var caption: String = "Start / stop · GPS on runs · strap HR"
     var onSaved: (() -> Void)? = nil
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        EntryLabel(session: model.session, caption: caption, onSaved: onSaved)
-    }
-}
-
-private struct EntryLabel: View {
-    @ObservedObject var session: LiveSessionRecorder
-    var caption: String
-    var onSaved: (() -> Void)?
 
     var body: some View {
         NavigationLink {
@@ -217,17 +206,15 @@ private struct EntryLabel: View {
         } label: {
             NoopCard {
                 HStack(spacing: 12) {
-                    Image(systemName: session.running ? "record.circle" : "play.circle.fill")
+                    Image(systemName: "play.circle.fill")
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(session.running ? StrandPalette.statusCritical : StrandPalette.accent)
+                        .foregroundStyle(StrandPalette.accent)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(session.running ? "Session in progress" : "Live session")
+                        Text("Live session")
                             .font(StrandFont.headline)
                             .foregroundStyle(StrandPalette.textPrimary)
-                        Text(session.running
-                             ? "\(session.sport) · \(session.elapsedLabel)"
-                             : caption)
+                        Text(caption)
                             .font(StrandFont.footnote)
                             .foregroundStyle(StrandPalette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -241,6 +228,6 @@ private struct EntryLabel: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(session.running ? "Open live workout in progress" : "Start a live workout session")
+        .accessibilityLabel("Start a live workout session")
     }
 }

@@ -6,6 +6,7 @@ enum NavItem: String, CaseIterable, Identifiable, Hashable {
     case intelligence = "Intelligence"
     case coach = "Coach"
     case live = "Live"
+    case liveSession = "Live session"
     case breathe = "Breathe"
     case intervals = "Intervals"
     case explore = "Explore"
@@ -30,6 +31,7 @@ enum NavItem: String, CaseIterable, Identifiable, Hashable {
         case .intelligence: return "brain.head.profile"
         case .coach: return "sparkles"
         case .live: return "waveform.path.ecg"
+        case .liveSession: return "play.circle.fill"
         case .breathe: return "lungs.fill"
         case .intervals: return "timer"
         case .explore: return "square.grid.2x2.fill"
@@ -108,6 +110,7 @@ struct NavDetail: View {
         case .intelligence: IntelligenceView()
         case .coach: CoachView()
         case .live: LiveView()
+        case .liveSession: LiveSessionView()
         case .breathe: BreathingView()
         case .intervals: IntervalTimerView()
         case .explore: MetricExplorerView()
@@ -207,11 +210,11 @@ private struct GlassTabChrome: ViewModifier {
 private struct MoreMenuView: View {
     private var items: [NavItem] {
         // Notifications enumerates Mac apps via NSWorkspace — the iOS screen is a stub.
-        // Breathe / Intervals / Workouts live on Today → Train on iPhone.
+        // Breathe / Intervals / Workouts live on Today; Live session is first so it is findable.
         let hide: Set<NavItem> = [.today, .sleep, .trends, .live, .notifications,
                                   .breathe, .intervals, .workouts]
-        let rest = NavItem.allCases.filter { !hide.contains($0) && $0 != .dataSources }
-        return [.dataSources] + rest
+        let rest = NavItem.allCases.filter { !hide.contains($0) && $0 != .dataSources && $0 != .liveSession }
+        return [.liveSession, .dataSources] + rest
     }
 
     var body: some View {
