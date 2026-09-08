@@ -1063,7 +1063,7 @@ private struct PrimaryButtonStyle: ButtonStyle {
 
 private struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        Group { configuration.label }
             .font(StrandFont.subhead.weight(.semibold))
             .foregroundStyle(StrandPalette.textPrimary)
             .padding(.vertical, 11)
@@ -1083,7 +1083,7 @@ private struct SecondaryButtonStyle: ButtonStyle {
 
 private struct GhostButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        Group { configuration.label }
             .font(StrandFont.subhead)
             .foregroundStyle(configuration.isPressed ? StrandPalette.textSecondary : StrandPalette.textTertiary)
             .padding(.vertical, 12)
