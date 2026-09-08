@@ -146,13 +146,25 @@ struct LogWorkoutView: View {
     @MainActor
     private func save() async {
         error = nil
-        let energy = parsedEnergy()
-        if energy == .invalid {
+        let kcalText = energyText.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+        let kcal: Double?
+        if kcalText.isEmpty {
+            kcal = nil
+        } else if let v = Double(kcalText), v >= 0, v.isFinite {
+            kcal = v
+        } else {
             error = "Calories need a number, or leave that field blank."
             return
         }
-        let hr = parsedHR()
-        if hr == .invalid {
+
+        let hrTextTrimmed = hrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hr: Int?
+        if hrTextTrimmed.isEmpty {
+            hr = nil
+        } else if let v = Int(hrTextTrimmed), (1..<250).contains(v) {
+            hr = v
+        } else {
             error = "Average HR needs a whole number, or leave that field blank."
             return
         }
@@ -166,7 +178,7 @@ struct LogWorkoutView: View {
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let row = WorkoutRow(
             startTs: startTs, endTs: endTs, sport: sport, source: "logged",
-            durationS: durationS, energyKcal: energy.value, avgHr: hr.value, maxHr: nil,
+            durationS: durationS, energyKcal: kcal, avgHr: hr, maxHr: nil,
             strain: nil, distanceM: nil, zonesJSON: nil,
             notes: trimmedNotes.isEmpty ? nil : trimmedNotes)
         let ok = await repo.logWorkout(row)
@@ -176,31 +188,6 @@ struct LogWorkoutView: View {
         }
         onSaved?()
         dismiss()
-    }
-
-    private enum Parsed<T> {
-        case empty
-        case ok(T)
-        case invalid
-        var value: T? {
-            if case .ok(let v) = self { return v }
-            return nil
-        }
-    }
-
-    private func parsedEnergy() -> Parsed<Double> {
-        let t = energyText.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: ",", with: ".")
-        if t.isEmpty { return .empty }
-        guard let v = Double(t), v >= 0, v.isFinite else { return .invalid }
-        return .ok(v)
-    }
-
-    private func parsedHR() -> Parsed<Int> {
-        let t = hrText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if t.isEmpty { return .empty }
-        guard let v = Int(t), v > 0, v < 250 else { return .invalid }
-        return .ok(v)
     }
 }
 
