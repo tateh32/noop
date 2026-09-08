@@ -99,8 +99,11 @@ targets:
           - UIInterfaceOrientationPortrait
         UIBackgroundModes:
           - bluetooth-central
+          - location
         NSBluetoothAlwaysUsageDescription: "NOOP connects directly to your WHOOP strap over Bluetooth to read heart rate, R-R intervals, battery, and sensor data locally on this iPhone. Nothing leaves your device."
         NSBluetoothPeripheralUsageDescription: "NOOP connects directly to your WHOOP strap over Bluetooth to read heart rate and sensor data locally on this iPhone. Nothing leaves your device."
+        NSLocationWhenInUseUsageDescription: "NOOP uses this iPhone’s GPS during a live run, walk, ride or hike so it can record distance and pace. Location stays on the phone. An Apple Watch is not required."
+        NSMotionUsageDescription: "NOOP reads this iPhone’s step count during a live walk, run or hike. Motion data stays on the phone."
     entitlements:
       path: StrandiOS/Resources/NOOP.entitlements
     settings:

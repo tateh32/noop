@@ -106,20 +106,40 @@ struct IntervalTimerView: View {
     // MARK: Status row
 
     private var statusRow: some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 8) {
+            connectionPill
+            HStack {
+                Spacer(minLength: 0)
+                runStatePill
+            }
+        }
+        #else
         HStack(spacing: 10) {
-            if live.bonded {
-                StatePill("Buzz cues on", tone: .positive)
-            } else {
-                StatePill("Connect strap for buzz cues", tone: .warning)
-            }
+            connectionPill
             Spacer()
-            if running {
-                StatePill("Running", tone: .accent, pulsing: true)
-            } else if isFinished {
-                StatePill("Complete", tone: .positive)
-            } else {
-                StatePill("Paused", tone: .neutral, showsDot: false)
-            }
+            runStatePill
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private var connectionPill: some View {
+        if live.bonded {
+            StatePill("Buzz cues on", tone: .positive)
+        } else {
+            StatePill("Connect strap for buzz cues", tone: .warning)
+        }
+    }
+
+    @ViewBuilder
+    private var runStatePill: some View {
+        if running {
+            StatePill("Running", tone: .accent, pulsing: true)
+        } else if isFinished {
+            StatePill("Complete", tone: .positive)
+        } else {
+            StatePill("Paused", tone: .neutral, showsDot: false)
         }
     }
 
@@ -256,12 +276,22 @@ struct IntervalTimerView: View {
                 }
                 .frame(height: 8)
 
+                #if os(iOS)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())],
+                          alignment: .leading, spacing: 12) {
+                    overviewStat("Work", "\(workSeconds)s", StrandPalette.accent)
+                    overviewStat("Rest", "\(restSeconds)s", StrandPalette.metricCyan)
+                    overviewStat("Rounds", "\(rounds)", StrandPalette.textPrimary)
+                    overviewStat("Remaining", timeString(max(0, totalPlanned - elapsed)), StrandPalette.textSecondary)
+                }
+                #else
                 HStack(spacing: 0) {
                     overviewStat("Work", "\(workSeconds)s", StrandPalette.accent)
                     overviewStat("Rest", "\(restSeconds)s", StrandPalette.metricCyan)
                     overviewStat("Rounds", "\(rounds)", StrandPalette.textPrimary)
                     overviewStat("Remaining", timeString(max(0, totalPlanned - elapsed)), StrandPalette.textSecondary)
                 }
+                #endif
             }
         }
     }
@@ -301,26 +331,55 @@ struct IntervalTimerView: View {
 
     private func configStepper(title: String, unit: String?, value: Binding<Int>,
                                range: ClosedRange<Int>, step: Int, tint: Color) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
-                Text("\(range.lowerBound)–\(range.upperBound)\(unit.map { " \($0)" } ?? "") · step \(step)")
-                    .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                configStepperLabels(title: title, unit: unit, range: range, step: step)
+                Spacer(minLength: 8)
+                configStepperValue(value.wrappedValue, unit: unit, tint: tint)
             }
-            Spacer()
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("\(value.wrappedValue)")
-                    .font(StrandFont.number(24))
-                    .foregroundStyle(tint)
-                    .frame(minWidth: 44, alignment: .trailing)
-                if let unit {
-                    Text(unit).font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
-                }
+            HStack {
+                Spacer(minLength: 0)
+                configStepperControl(title: title, unit: unit, value: value, range: range, step: step)
             }
-            Stepper("", value: value, in: range, step: step)
-                .labelsHidden()
-                .accessibilityLabel("\(title) \(unit ?? "")")
         }
+        #else
+        HStack {
+            configStepperLabels(title: title, unit: unit, range: range, step: step)
+            Spacer()
+            configStepperValue(value.wrappedValue, unit: unit, tint: tint)
+            configStepperControl(title: title, unit: unit, value: value, range: range, step: step)
+        }
+        #endif
+    }
+
+    private func configStepperLabels(title: String, unit: String?,
+                                     range: ClosedRange<Int>, step: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+            Text("\(range.lowerBound)–\(range.upperBound)\(unit.map { " \($0)" } ?? "") · step \(step)")
+                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func configStepperValue(_ value: Int, unit: String?, tint: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text("\(value)")
+                .font(StrandFont.number(24))
+                .foregroundStyle(tint)
+                .frame(minWidth: 44, alignment: .trailing)
+            if let unit {
+                Text(unit).font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
+            }
+        }
+    }
+
+    private func configStepperControl(title: String, unit: String?, value: Binding<Int>,
+                                      range: ClosedRange<Int>, step: Int) -> some View {
+        Stepper("", value: value, in: range, step: step)
+            .labelsHidden()
+            .accessibilityLabel("\(title) \(unit ?? "")")
     }
 
     // MARK: Timer logic

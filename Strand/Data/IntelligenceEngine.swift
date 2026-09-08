@@ -61,6 +61,7 @@ final class IntelligenceEngine: ObservableObject {
         var out: [Computed] = []
         var dailies: [DailyMetric] = []
         var cachedSleep: [CachedSleepSession] = []
+        var detectedWorkouts: [WorkoutRow] = []
         let sampleLimit = PhoneBudget.intelligenceSampleLimit
         // Skip nights that already have a recovery score (WHOOP import or a prior
         // pass). Do not bail out of the whole loop — `repo.today` is the latest
@@ -95,6 +96,7 @@ final class IntelligenceEngine: ObservableObject {
                                 rhr: res.daily.restingHr))
             dailies.append(res.daily)
             cachedSleep.append(contentsOf: res.cachedSleep)
+            detectedWorkouts.append(contentsOf: Self.workoutRows(from: res.workouts))
             await Task.yield()
         }
 
@@ -105,6 +107,7 @@ final class IntelligenceEngine: ObservableObject {
         let computedId = deviceId + "-noop"
         if !dailies.isEmpty { _ = try? await store.upsertDailyMetrics(dailies, deviceId: computedId) }
         if !cachedSleep.isEmpty { _ = try? await store.upsertSleepSessions(cachedSleep, deviceId: computedId) }
+        if !detectedWorkouts.isEmpty { _ = try? await store.upsertWorkouts(detectedWorkouts, deviceId: computedId) }
 
         results = out
         note = out.isEmpty && alreadyScored.isEmpty
@@ -129,6 +132,25 @@ final class IntelligenceEngine: ObservableObject {
                     profile: profile, baselines: baselines, maxHROverride: maxHROverride)
                 cont.resume(returning: result)
             }
+        }
+    }
+
+    /// Map detector bouts into the same cache shape WHOOP / Apple Health imports use.
+    static func workoutRows(from sessions: [ExerciseSession]) -> [WorkoutRow] {
+        sessions.map { s in
+            let zjson: String?
+            if s.zoneTimePct.isEmpty {
+                zjson = nil
+            } else {
+                let obj = Dictionary(uniqueKeysWithValues: s.zoneTimePct.map { ("z\($0.key)", $0.value) })
+                zjson = (try? JSONSerialization.data(withJSONObject: obj))
+                    .flatMap { String(data: $0, encoding: .utf8) }
+            }
+            return WorkoutRow(
+                startTs: s.start, endTs: s.end, sport: "Workout", source: "noop",
+                durationS: s.durationS, energyKcal: s.caloriesKcal,
+                avgHr: Int(s.avgHR.rounded()), maxHr: s.peakHR, strain: s.strain,
+                distanceM: nil, zonesJSON: zjson, notes: nil)
         }
     }
 }

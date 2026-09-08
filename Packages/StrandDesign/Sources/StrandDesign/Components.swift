@@ -212,7 +212,7 @@ public struct SegmentedPillControl<T: Hashable>: View {
         self.items = items; self._selection = selection; self.label = label
     }
     public var body: some View {
-        HStack(spacing: 4) {
+        let pills = HStack(spacing: 4) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 let sel = item == selection
                 Button { withAnimation(appearance.spring) { selection = item } } label: {
@@ -235,6 +235,17 @@ public struct SegmentedPillControl<T: Hashable>: View {
             }
         }
         .overlay(Capsule(style: .continuous).strokeBorder(appearance.isGlass ? Color.white.opacity(0.22) : StrandPalette.hairline, lineWidth: 1))
+
+        #if os(iOS)
+        // Fit the row when there is room; otherwise scroll instead of clipping
+        // the last pills (7D/30D/90D/1Y/All on a 390pt phone).
+        ViewThatFits(in: .horizontal) {
+            pills
+            ScrollView(.horizontal, showsIndicators: false) { pills }
+        }
+        #else
+        pills
+        #endif
     }
 }
 

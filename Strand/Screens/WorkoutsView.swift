@@ -31,9 +31,12 @@ struct WorkoutsView: View {
 
     var body: some View {
         ScreenScaffold(title: "Workouts", subtitle: "Every session, threaded together.") {
+            LogWorkoutEntryLink {
+                Task { await reloadRows() }
+            }
             if allRows.isEmpty {
                 ComingSoon(what: loaded
-                    ? "No workouts yet. They come from your WHOOP and Apple Health history. Import in Data Sources to bring them in."
+                    ? "Nothing in the log yet. Tap Log a session above — no Apple Watch needed. A WHOOP export, an Apple Health export, or the strap overnight will fill history too."
                     : "Loading your sessions…")
             } else {
                 // Compute the windowed rows and per-sport groups ONCE per body
@@ -65,16 +68,27 @@ struct WorkoutsView: View {
         }
     }
 
+    private func reloadRows() async {
+        let r = await repo.workoutRows()
+        allRows = r
+        loaded = true
+        range = defaultRange(for: r)
+    }
+
     // MARK: - Range control
 
     private func rangeBar(rows: [WorkoutRow], effectiveRange: Range) -> some View {
         let fellBack = effectiveRange != range
         let caption = rangeCaption(rows: rows, effectiveRange: effectiveRange, fellBack: fellBack)
         return VStack(alignment: .leading, spacing: 8) {
+            #if os(iOS)
+            SegmentedPillControl(Range.allCases, selection: $range) { $0.label }
+            #else
             HStack {
                 Spacer()
                 SegmentedPillControl(Range.allCases, selection: $range) { $0.label }
             }
+            #endif
             Text(caption)
                 .font(StrandFont.footnote)
                 .foregroundStyle(fellBack ? StrandPalette.statusWarning : StrandPalette.textTertiary)
@@ -225,8 +239,10 @@ struct WorkoutsView: View {
                           trailing: "\(rows.count) total")
             NoopCard(padding: 0) {
                 LazyVStack(spacing: 0) {
-                    sessionHeaderRow
-                    Divider().overlay(StrandPalette.hairline)
+                    if !PhoneBudget.isPhone {
+                        sessionHeaderRow
+                        Divider().overlay(StrandPalette.hairline)
+                    }
                     ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
                         sessionRow(row)
                             .background(idx % 2 == 1
@@ -261,6 +277,55 @@ struct WorkoutsView: View {
     }
 
     private func sessionRow(_ row: WorkoutRow) -> some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(spacing: 7) {
+                    Image(systemName: sportIcon(row.sport))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(StrandPalette.textSecondary)
+                    Text(row.sport)
+                        .font(StrandFont.subhead)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text(durationLabel(row.durationS))
+                    .font(StrandFont.number(15))
+                    .foregroundStyle(StrandPalette.textPrimary)
+            }
+            HStack(spacing: 8) {
+                Text("\(dateLabel(row.startTs)) · \(timeLabel(row.startTs))")
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                sourceBadge(row.source)
+            }
+            HStack(spacing: 12) {
+                if let hr = row.avgHr {
+                    Text("\(hr) bpm").foregroundStyle(StrandPalette.metricRose)
+                }
+                if let kcal = row.energyKcal {
+                    Text("\(grouped(kcal)) kcal").foregroundStyle(StrandPalette.metricAmber)
+                }
+                let dist = distanceLabel(row.distanceM)
+                if dist != "–" {
+                    Text(dist).foregroundStyle(StrandPalette.metricCyan)
+                }
+            }
+            .font(StrandFont.captionNumber)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+        }
+        .padding(.horizontal, NoopMetrics.cardPadding)
+        .padding(.vertical, 10)
+        #else
+        macSessionRow(row)
+        #endif
+    }
+
+    private func macSessionRow(_ row: WorkoutRow) -> some View {
         HStack(spacing: 0) {
             // Date + time
             VStack(alignment: .leading, spacing: 1) {
@@ -314,10 +379,15 @@ struct WorkoutsView: View {
 
     /// Source badge built from the locked SourceBadge component (no custom capsule).
     private func sourceBadge(_ source: String) -> some View {
-        let isWhoop = source.lowercased().contains("whoop")
-        return SourceBadge(isWhoop ? "Whoop" : "Apple",
-                           tint: isWhoop ? StrandPalette.accent : StrandPalette.metricCyan)
-            .accessibilityLabel(isWhoop ? "Source Whoop" : "Source Apple Health")
+        let lower = source.lowercased()
+        let (label, tint): (String, Color) = {
+            if lower.contains("whoop") { return ("Whoop", StrandPalette.accent) }
+            if lower.contains("log") { return ("Logged", StrandPalette.metricAmber) }
+            if lower.contains("noop") { return ("NOOP", StrandPalette.textPrimary) }
+            return ("Apple", StrandPalette.metricCyan)
+        }()
+        return SourceBadge(label, tint: tint)
+            .accessibilityLabel("Source \(label)")
     }
 
     // MARK: - Grid columns
@@ -502,6 +572,129 @@ struct WorkoutsView: View {
         static let kcal: CGFloat = 70
         static let dist: CGFloat = 72
         static let source: CGFloat = 80
+    }
+}
+
+// MARK: - Current (today's sessions, else the latest)
+
+/// Pushed from Today → Train. Not a second copy of the full log — just what
+/// happened today, with a door into All Sessions.
+struct CurrentWorkoutsView: View {
+    @EnvironmentObject var repo: Repository
+    @State private var rows: [WorkoutRow] = []
+    @State private var loaded = false
+
+    private var todayStart: Int {
+        Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)
+    }
+    private var todayRows: [WorkoutRow] {
+        rows.filter { $0.startTs >= todayStart }
+    }
+
+    var body: some View {
+        ScreenScaffold(title: "Current",
+                       subtitle: "Today’s sessions, or the latest if you haven’t trained yet.") {
+            LogWorkoutEntryLink {
+                Task { await reload() }
+            }
+            if !loaded {
+                ComingSoon(what: "Loading your sessions…")
+            } else if rows.isEmpty {
+                ComingSoon(what: "Nothing today yet. Tap Log a session above — no Apple Watch needed. Import a WHOOP zip, or wear the strap overnight, to backfill the rest.")
+            } else {
+                if todayRows.isEmpty {
+                    DataPendingNote(
+                        title: "No session today",
+                        message: "Nothing logged yet today. The card below is your most recent session. Open the full log for every sport and date.",
+                        symbol: "figure.run")
+                } else {
+                    SectionHeader("Today", overline: "Sessions",
+                                  trailing: "\(todayRows.count)")
+                }
+                let shown = todayRows.isEmpty ? Array(rows.prefix(1)) : todayRows
+                ForEach(Array(shown.enumerated()), id: \.offset) { _, w in
+                    currentCard(w)
+                }
+                NavigationLink {
+                    WorkoutsView()
+                } label: {
+                    StatTile(label: "Workouts", value: "\(rows.count)",
+                             caption: "All sessions",
+                             accent: StrandPalette.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("All workout sessions")
+            }
+        }
+        .task {
+            await reload()
+        }
+    }
+
+    private func reload() async {
+        rows = await repo.workoutRows()
+        loaded = true
+    }
+
+    private func currentCard(_ row: WorkoutRow) -> some View {
+        NoopCard {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(row.sport)
+                        .font(StrandFont.headline)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(durationLabel(row.durationS ?? Double(max(row.endTs - row.startTs, 0))))
+                        .font(StrandFont.number(18))
+                        .foregroundStyle(StrandPalette.textPrimary)
+                }
+                Text(stampLabel(row.startTs))
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                HStack(spacing: 12) {
+                    if let hr = row.avgHr {
+                        Text("\(hr) bpm").foregroundStyle(StrandPalette.metricRose)
+                    }
+                    if let kcal = row.energyKcal {
+                        Text("\(Int(kcal.rounded())) kcal").foregroundStyle(StrandPalette.metricAmber)
+                    }
+                    if let m = row.distanceM, m > 0 {
+                        Text(m >= 1000 ? String(format: "%.1f km", m / 1000) : "\(Int(m.rounded())) m")
+                            .foregroundStyle(StrandPalette.metricCyan)
+                    }
+                    Spacer(minLength: 0)
+                    sourceBadge(row.source)
+                }
+                .font(StrandFont.captionNumber)
+            }
+        }
+    }
+
+    private func stampLabel(_ ts: Int) -> String {
+        let f = DateFormatter()
+        f.locale = .current
+        f.setLocalizedDateFormatFromTemplate("EEEEdMMMMjm")
+        return f.string(from: Date(timeIntervalSince1970: TimeInterval(ts)))
+    }
+
+    private func durationLabel(_ s: Double) -> String {
+        let total = Int(s.rounded())
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        if h > 0 { return "\(h)h \(m)m" }
+        return "\(m)m"
+    }
+
+    private func sourceBadge(_ source: String) -> some View {
+        let lower = source.lowercased()
+        let (label, tint): (String, Color) = {
+            if lower.contains("whoop") { return ("Whoop", StrandPalette.accent) }
+            if lower.contains("log") { return ("Logged", StrandPalette.metricAmber) }
+            if lower.contains("noop") { return ("NOOP", StrandPalette.textPrimary) }
+            return ("Apple", StrandPalette.metricCyan)
+        }()
+        return SourceBadge(label, tint: tint)
     }
 }
 

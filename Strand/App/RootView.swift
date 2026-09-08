@@ -6,6 +6,7 @@ enum NavItem: String, CaseIterable, Identifiable, Hashable {
     case intelligence = "Intelligence"
     case coach = "Coach"
     case live = "Live"
+    case liveSession = "Live session"
     case breathe = "Breathe"
     case intervals = "Intervals"
     case explore = "Explore"
@@ -30,6 +31,7 @@ enum NavItem: String, CaseIterable, Identifiable, Hashable {
         case .intelligence: return "brain.head.profile"
         case .coach: return "sparkles"
         case .live: return "waveform.path.ecg"
+        case .liveSession: return "play.circle.fill"
         case .breathe: return "lungs.fill"
         case .intervals: return "timer"
         case .explore: return "square.grid.2x2.fill"
@@ -108,6 +110,7 @@ struct NavDetail: View {
         case .intelligence: IntelligenceView()
         case .coach: CoachView()
         case .live: LiveView()
+        case .liveSession: LiveSessionView()
         case .breathe: BreathingView()
         case .intervals: IntervalTimerView()
         case .explore: MetricExplorerView()
@@ -130,13 +133,14 @@ struct NavDetail: View {
 
 #if os(iOS)
 /// iPhone shell: five tabs. Only the selected tab is mounted — iOS TabView otherwise
-/// keeps Today + Sleep + Trends + Live alive together (charts, heat-strip, 1 Hz HR).
+/// keeps Today + Sleep + Trends + Train alive together (charts, heat-strip, 1 Hz HR).
 private struct iPhoneRoot: View {
     private enum Tab: Hashable {
-        case today, sleep, trends, live, more
+        case today, sleep, trends, train, more
     }
 
     @Environment(\.noopAppearance) private var appearance
+    @AppStorage("noop.openedTrainTab") private var openedTrainTab = false
     @State private var tab: Tab = .today
 
     var body: some View {
@@ -169,13 +173,13 @@ private struct iPhoneRoot: View {
             .tag(Tab.trends)
 
             NavigationStack {
-                if tab == .live { LiveView() } else { Color.clear }
+                if tab == .train { LiveSessionView() } else { Color.clear }
             }
             .tabItem {
-                Label("Live", systemImage: NavItem.live.icon)
+                Label("Train", systemImage: "figure.run")
                     .symbolRenderingMode(.hierarchical)
             }
-            .tag(Tab.live)
+            .tag(Tab.train)
 
             NavigationStack {
                 if tab == .more { MoreMenuView() } else { Color.clear }
@@ -188,6 +192,14 @@ private struct iPhoneRoot: View {
         }
         .tint(appearance.accent)
         .modifier(GlassTabChrome(enabled: appearance.isGlass))
+        .onAppear {
+            // First launch of a build that has Train: land on it so Start session is the
+            // first screen, not buried under Control Center or the old Live HR tab.
+            if !openedTrainTab {
+                tab = .train
+                openedTrainTab = true
+            }
+        }
     }
 }
 
@@ -207,9 +219,14 @@ private struct GlassTabChrome: ViewModifier {
 private struct MoreMenuView: View {
     private var items: [NavItem] {
         // Notifications enumerates Mac apps via NSWorkspace — the iOS screen is a stub.
-        let hide: Set<NavItem> = [.today, .sleep, .trends, .live, .notifications]
-        let rest = NavItem.allCases.filter { !hide.contains($0) && $0 != .dataSources }
-        return [.dataSources] + rest
+        // Breathe / Intervals / Workouts live on Today. Train is a tab (same Live session
+        // screen). Strap pairing moved here because the old Live tab is now Train.
+        let hide: Set<NavItem> = [.today, .sleep, .trends, .notifications,
+                                  .breathe, .intervals, .workouts]
+        let rest = NavItem.allCases.filter {
+            !hide.contains($0) && $0 != .dataSources && $0 != .liveSession && $0 != .live
+        }
+        return [.liveSession, .live, .dataSources] + rest
     }
 
     var body: some View {

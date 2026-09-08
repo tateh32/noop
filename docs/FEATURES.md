@@ -266,7 +266,11 @@ Windows are taken relative to your latest recorded day and auto-widen on sparse 
 
 ## Workouts
 
-**Sidebar: Workouts · works from imported WHOOP and Apple Health data.**
+**Sidebar: Workouts · iPhone: Train tab for live Start / Stop; history still under Workouts.**
+
+On iPhone, **Train** in the tab bar is a live session: Start / Stop on this phone
+(GPS on run/walk/ride/hike, WHOOP HR if the strap is bonded). Log a session after
+the fact from Today. There is no Apple Watch app.
 
 `WorkoutsView.swift` — the activity log, threaded together:
 
