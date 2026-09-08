@@ -719,13 +719,15 @@ private struct ImportStep: View {
                 HStack(spacing: 8) {
                     Image(systemName: "sidebar.left")
                         .foregroundStyle(StrandPalette.textTertiary)
-                    #if os(iOS)
-                    Text("Find it under More → Data Sources.")
-                    #else
-                    Text("Find it in the sidebar under Data Sources.")
-                    #endif
-                        .font(StrandFont.subhead)
-                        .foregroundStyle(StrandPalette.textSecondary)
+                    Group {
+                        #if os(iOS)
+                        Text("Find it under More → Data Sources.")
+                        #else
+                        Text("Find it in the sidebar under Data Sources.")
+                        #endif
+                    }
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textSecondary)
                 }
             }
         }

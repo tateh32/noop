@@ -23,6 +23,7 @@ enum ImportStaging {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
         var coordError: NSError?
+        var copyError: NSError?
         var copied: URL?
         let coordinator = NSFileCoordinator()
         coordinator.coordinate(readingItemAt: url, options: [.withoutChanges], error: &coordError) { actual in
@@ -37,10 +38,11 @@ enum ImportStaging {
                 try FileManager.default.copyItem(at: actual, to: dest)
                 copied = dest
             } catch {
-                coordError = error as NSError
+                copyError = error as NSError
             }
         }
         if let coordError { throw coordError }
+        if let copyError { throw copyError }
         guard let copied, FileManager.default.fileExists(atPath: copied.path) else {
             throw StageError.unreadable(url.lastPathComponent)
         }
