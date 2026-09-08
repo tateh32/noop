@@ -98,6 +98,8 @@ struct TodayView: View {
                 title: "Days are in. Scores are still blank.",
                 message: "NOOP stored \(repo.days.count) days but none have recovery, HRV or strain yet. On Data Sources, tap Start over, then reimport the .zip from app.whoop.com → Data Management."
             )
+        } else if let stale = staleScoreNote {
+            DataPendingNote(title: stale.title, message: stale.message, symbol: "calendar")
         }
         heroSection
         readinessSection
@@ -180,7 +182,7 @@ struct TodayView: View {
         let score = d?.recovery
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Today’s Synthesis", overline: "At a glance",
-                          trailing: greetingWord)
+                          trailing: staleScoreCaption ?? greetingWord)
             HStack(alignment: .top, spacing: NoopMetrics.gap) {
                 NoopCard {
                     RecoveryRing(
@@ -433,12 +435,32 @@ struct TodayView: View {
 
     private var dateLine: String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "EEEE, d MMMM"
-        if let day = repo.today?.day, let date = Self.dayParser.date(from: day) {
-            return f.string(from: date)
-        }
+        f.locale = .current
+        f.timeZone = .current
+        f.setLocalizedDateFormatFromTemplate("EEEEdMMMM")
         return f.string(from: Date())
+    }
+
+    /// Latest imported/scored day is not calendar today — say so instead of
+    /// relabeling the whole home screen as that older date.
+    private var staleScoreCaption: String? {
+        guard let day = repo.today?.day, !Repository.isCalendarToday(day) else { return nil }
+        return Repository.prettyDay(day) ?? day
+    }
+
+    private var staleScoreNote: (title: String, message: String)? {
+        guard let day = repo.today?.day, !Repository.isCalendarToday(day) else { return nil }
+        let label = Repository.prettyDay(day) ?? day
+        if Repository.calendarDaysAgo(day) == 1 {
+            return (
+                "Showing yesterday",
+                "Today’s WHOOP cycle is still open, so it has no recovery yet. Yesterday’s score is on the ring."
+            )
+        }
+        return (
+            "Latest scored day is \(label)",
+            "That’s the newest complete day in your WHOOP export. The date above is today. Live heart rate is now; tonight’s recovery lands after you sleep with the strap connected to NOOP. If the export should include later days, tap Start over in Data Sources and import a fresh zip from app.whoop.com → Data Management."
+        )
     }
 
     /// A short recovery state word for the synthesis hero.

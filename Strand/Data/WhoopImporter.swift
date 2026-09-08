@@ -17,7 +17,7 @@ enum WhoopImporter {
         // physiological_cycles → DailyMetric (one row per sleep-to-sleep day)
         var metrics: [DailyMetric] = []
         for c in result.cycles {
-            guard let start = c.cycleStart else { continue }
+            guard let day = cycleDay(c) else { continue }
             // Skip the trailing in-progress cycle (blank recovery/strain/HRV/sleep) so
             // `days.last` is a real scored day after import — the usual reason a WHOOP
             // export "imported" but Today stayed empty.
@@ -25,7 +25,7 @@ enum WhoopImporter {
                 || c.hrvMs != nil || c.restingHeartRate != nil || c.asleepDurationMin != nil
             guard hasSignal else { continue }
             metrics.append(DailyMetric(
-                day: dayString(start, tzOffsetMin: c.tzOffsetMin),
+                day: day,
                 totalSleepMin: c.asleepDurationMin,
                 efficiency: c.sleepEfficiencyPct,
                 deepMin: c.deepSleepDurationMin,
@@ -70,8 +70,7 @@ enum WhoopImporter {
             if let v { points.append(MetricPoint(day: day, key: key, value: v)) }
         }
         for c in result.cycles {
-            guard let start = c.cycleStart else { continue }
-            let day = dayString(start, tzOffsetMin: c.tzOffsetMin)
+            guard let day = cycleDay(c) else { continue }
             add(day, "recovery", c.recoveryScore);        add(day, "strain", c.dayStrain)
             add(day, "rhr", c.restingHeartRate);          add(day, "hrv", c.hrvMs)
             add(day, "spo2", c.bloodOxygenPct);           add(day, "skin_temp", c.skinTempCelsius)
@@ -103,9 +102,9 @@ enum WhoopImporter {
         let (rm, rs) = meanStd(result.cycles.compactMap(\.restingHeartRate))
         let (hm, hs) = meanStd(result.cycles.compactMap(\.hrvMs))
         for c in result.cycles {
-            guard let start = c.cycleStart, let rhr = c.restingHeartRate, let hrv = c.hrvMs else { continue }
+            guard let rhr = c.restingHeartRate, let hrv = c.hrvMs, let day = cycleDay(c) else { continue }
             let z = 0.6 * ((rhr - rm) / rs) - 0.6 * ((hrv - hm) / hs)
-            add(dayString(start, tzOffsetMin: c.tzOffsetMin), "stress", max(0, min(3, 1.5 + z)))
+            add(day, "stress", max(0, min(3, 1.5 + z)))
         }
         // Derived: daily HR-zone minutes + strength-activity time from workouts.
         var zoneByDay: [String: [Double]] = [:]
@@ -133,8 +132,8 @@ enum WhoopImporter {
 
         // Journal behaviours → correlation insights.
         let journal: [JournalEntry] = result.journal.compactMap { j in
-            guard let start = j.cycleStart, let q = j.question else { return nil }
-            return JournalEntry(day: dayString(start, tzOffsetMin: j.tzOffsetMin),
+            guard let dayStamp = j.cycleStart, let q = j.question else { return nil }
+            return JournalEntry(day: dayString(dayStamp, tzOffsetMin: j.tzOffsetMin),
                                 question: q,
                                 answeredYes: (j.answer ?? "").lowercased() == "true",
                                 notes: j.notes)
@@ -159,6 +158,14 @@ enum WhoopImporter {
         try await store.upsertWorkouts(workouts, deviceId: deviceId)
 
         return result.summary
+    }
+
+    /// Calendar day for a cycle: wake morning, else cycle start, else cycle end.
+    /// WHOOP recovery is the morning you woke; requiring `cycleStart` used to drop
+    /// scored rows whose start stamp used a format we didn't parse.
+    private static func cycleDay(_ c: WhoopCycleRow) -> String? {
+        guard let stamp = c.wakeOnset ?? c.cycleStart ?? c.cycleEnd else { return nil }
+        return dayString(stamp, tzOffsetMin: c.tzOffsetMin)
     }
 
     /// Local-calendar day string for the cycle's own UTC offset.

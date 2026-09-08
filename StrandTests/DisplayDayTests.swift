@@ -33,4 +33,23 @@ final class DisplayDayTests: XCTestCase {
         let open = day("2026-09-06")
         XCTAssertEqual(Repository.displayDay(from: [old, mid, open])?.day, "2026-09-05")
     }
+
+    func testCivilDateIsLocalCalendarNotUTCMidnight() {
+        let date = Repository.civilDate("2026-04-08")
+        XCTAssertNotNil(date)
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: date!)
+        XCTAssertEqual(c.year, 2026)
+        XCTAssertEqual(c.month, 4)
+        XCTAssertEqual(c.day, 8)
+    }
+
+    func testCalendarDaysAgoCountsLocalDays() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = .current
+        let from = cal.date(from: DateComponents(year: 2026, month: 9, day: 8))!
+        XCTAssertEqual(Repository.calendarDaysAgo("2026-04-08", from: from), 153)
+        XCTAssertEqual(Repository.calendarDaysAgo("2026-09-07", from: from), 1)
+        XCTAssertEqual(Repository.calendarDaysAgo("2026-09-08", from: from), 0)
+        XCTAssertTrue(Repository.isCalendarToday(Repository.calendarDay()))
+    }
 }
