@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import WhoopProtocol
+import WhoopStore
 import StrandAnalytics
 
 #if os(iOS)

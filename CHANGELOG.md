@@ -17,14 +17,13 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
----
-
 ## 1.3.7 — Train is a tab (Start / Stop)
 
 The Start / Stop workout was easy to miss: the **Live** tab is strap heart rate,
 not a workout, and a `NavigationLink` styled `.borderedProminent` can draw as
 empty on iOS 16.
 
+- **NOOPiOS compile:** `LiveSessionRecorder` now imports `WhoopStore` so `WorkoutRow` is in scope (the two `nil` errors were cascading from that).
 - **Train** is a bottom tab (running figure). That screen *is* Start session /
   Stop and save. First launch of this build opens Train so you land on it.
 - Strap pairing is **Strap** (top right on Train) or **More → Live**.
