@@ -13,8 +13,8 @@ import Foundation
 // Composition (top → bottom):
 //   (a) HERO  — full-width HStack that fills the width EQUALLY: RecoveryRing (left card)
 //               + InsightCard "Today's Synthesis" (right card). No lone card, no gap.
-//   (b) TRAIN (iPhone) — Breathe, Intervals, History, Current, Live session row.
-//       Start / Stop is the Train tab + a Start bar pinned to the bottom of Today.
+//   (b) TRAIN (iPhone, under Today's Synthesis) — Live session, Log a session,
+//       Breathe, Intervals, History, Current. Start / Stop is also the Train tab.
 //   (c) METRICS — one adaptive LazyVGrid of fixed-104pt StatTiles (Recovery, Strain,
 //               Sleep, HRV, RHR, SpO2, Respiratory, Steps, Weight, Calories) each with
 //               a 14-day sparkline so the grid tiles perfectly with no empty cells.
@@ -87,9 +87,6 @@ struct TodayView: View {
                     }
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            LiveSessionDock { Task { await reloadWorkouts() } }
-        }
         #else
         .overlay {
             if showingSupport {
@@ -103,9 +100,6 @@ struct TodayView: View {
     @ViewBuilder
     private var todaySections: some View {
         HealthAlertBanner()
-        #if os(iOS)
-        trainSection
-        #endif
         if repo.days.isEmpty {
             DataPendingNote(
                 title: "Live now. Your scores are building.",
@@ -120,6 +114,9 @@ struct TodayView: View {
             DataPendingNote(title: stale.title, message: stale.message, symbol: "calendar")
         }
         heroSection
+        #if os(iOS)
+        trainSection
+        #endif
         readinessSection
         metricsSection
         workoutsSection
@@ -333,7 +330,7 @@ struct TodayView: View {
     @ViewBuilder
     private var trainSection: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Train", overline: "Tab bar · Train",
+            SectionHeader("Train", overline: "Work",
                           trailing: workoutsToday.isEmpty ? "No session today" : "\(workoutsToday.count) today")
             LiveSessionEntryLink {
                 Task { await reloadWorkouts() }

@@ -27,8 +27,9 @@ empty on iOS 16.
 - **Train** is a bottom tab (running figure). That screen *is* Start session /
   Stop and save. First launch of this build opens Train so you land on it.
 - Strap pairing is **Strap** (top right on Train) or **More → Live**.
-- Today keeps a **Start live session** bar pinned above the tab bar, plus the
-  Train section. More still has **Live session** as the first row.
+- On Today, Train sits **under Today's Synthesis** (Live session, Log a session,
+  Breathe, Intervals, History, Current). No pinned Start bar on Today.
+- More still has **Live session** as the first row.
 - You will not see this until you **`git pull`** this branch and rebuild. Checkout
   does not download new commits.
 

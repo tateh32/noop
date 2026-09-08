@@ -298,36 +298,3 @@ struct LiveSessionPaintedLabel: View {
         .background(appearance.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
-
-#if os(iOS)
-/// Always-on Today bar: painted label, not `borderedProminent`, so it cannot collapse to zero size.
-struct LiveSessionDock: View {
-    @EnvironmentObject var model: AppModel
-    var onSaved: (() -> Void)? = nil
-
-    var body: some View {
-        LiveSessionDockInner(session: model.session, onSaved: onSaved)
-    }
-}
-
-private struct LiveSessionDockInner: View {
-    @ObservedObject var session: LiveSessionRecorder
-    var onSaved: (() -> Void)? = nil
-
-    var body: some View {
-        NavigationLink {
-            LiveSessionView(onSaved: onSaved)
-        } label: {
-            LiveSessionPaintedLabel(
-                title: session.running ? "Session running · \(session.elapsedLabel)" : "Start live session",
-                systemImage: session.running ? "record.circle" : "play.fill")
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
-        .background(.ultraThinMaterial)
-        .accessibilityLabel(session.running ? "Open running live session" : "Start live session")
-    }
-}
-#endif
