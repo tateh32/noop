@@ -8,7 +8,11 @@ enum WhoopImporter {
 
     @discardableResult
     static func importExport(url: URL, into store: WhoopStore, deviceId: String) async throws -> ImportSummary {
-        let result = try ImportCoordinator().importWhoopExport(from: url)
+        // ZIP + CSV parse is CPU and memory heavy. AppModel is @MainActor, so an unstructured
+        // Task would inherit the main actor and freeze (then jetsam) the iPhone during import.
+        let result = try await Task.detached(priority: .userInitiated) {
+            try ImportCoordinator().importWhoopExport(from: url)
+        }.value
 
         // physiological_cycles → DailyMetric (one row per sleep-to-sleep day)
         var metrics: [DailyMetric] = []

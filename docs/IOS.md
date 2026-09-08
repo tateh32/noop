@@ -34,6 +34,20 @@ the WHOOP 5.0 / MG protocol from **`b-nnett/goose`**. See [`../ATTRIBUTION.md`](
 - **HealthKit two-way sync is still optional / not required** to use the app. Apple Health
   history still comes in via `export.zip`, same as on the Mac.
 
+### Why the first sideload was slow and crashed
+
+The iPhone target compiled the Mac screens unchanged. That is a Mac memory budget
+on a phone:
+
+- Two SQLite handles each mmapped 256 MB (`PRAGMA mmap_size`). iOS jetsam kills that.
+- `TabView` kept Today, Sleep, Trends, and Live mounted together (charts + 1 Hz HR).
+- WHOOP zip parse and 21-night sleep staging ran on the main actor.
+- Trend/heat-strip views rebuilt years of points, each with a fresh `UUID`.
+
+The phone build now: no mmap, lazy tabs, off-main import/scoring, short sparkline
+queries, downsampled charts, one-year heat-strip. Rebuild scheme **NOOPiOS** after
+pulling this branch.
+
 ---
 
 ## Current platform support in the packages

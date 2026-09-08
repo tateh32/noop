@@ -151,7 +151,7 @@ private struct HeartRateSection: View {
                     Text(displayHR.map(String.init) ?? "—")
                         .font(StrandFont.display(72))
                         .foregroundStyle(hasLiveHR ? StrandPalette.hrZoneColor(zone) : StrandPalette.textTertiary)
-                        .contentTransition(.numericText())
+                        .noopNumericText(value: displayHR)
                         .animation(StrandMotion.interactive, value: displayHR)
                     Text("bpm").font(StrandFont.subhead).foregroundStyle(StrandPalette.textTertiary)
                 }

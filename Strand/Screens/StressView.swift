@@ -599,7 +599,7 @@ struct StressGauge: View {
                 Text(String(format: "%.1f", score))
                     .font(StrandFont.display(58))
                     .foregroundStyle(StrandPalette.textPrimary)
-                    .contentTransition(.numericText())
+                    .noopNumericText(value: score)
                 Text("of 3 · \(band.title)")
                     .font(StrandFont.overline)
                     .tracking(StrandFont.overlineTracking)

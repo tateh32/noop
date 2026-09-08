@@ -50,6 +50,19 @@ public enum StrandMotion {
     public static let fade = Animation.easeInOut(duration: durationStandard)
 }
 
+public extension View {
+    /// Numeric text transition + snappy animation on OS versions that have them.
+    /// A no-op on iOS 16 / macOS 13 so a sideload targeting those does not crash.
+    @ViewBuilder
+    func noopNumericText<V: Equatable>(value: V) -> some View {
+        if #available(iOS 17.0, macOS 14.0, *) {
+            self.contentTransition(.numericText()).animation(.snappy, value: value)
+        } else {
+            self
+        }
+    }
+}
+
 #if DEBUG
 private struct MotionDemo: View {
     @State private var on = false

@@ -17,6 +17,21 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.3.1 — iPhone: stop the freezes and crashes
+
+The first iPhone sideload compiled the Mac screens as-is. That is why it felt
+frozen and then died: SQLite mmapped 256 MB **per open handle** (two handles),
+every tab stayed alive (Today + Sleep + Trends + Live), import/scoring ran on
+the main thread, and charts rebuilt years of points with a new UUID each time.
+
+- **SQLite on iPhone** uses a 4 MB page cache, no mmap, file temp store.
+- **Only the selected tab is mounted.** Leaving Live actually stops the realtime HR stream.
+- **Import and sleep-staging run off the main thread.** Intelligence scores 3 nights, not 21.
+- **Today / Trends query a short window** and downsample chart marks. Heat-strip is one year.
+- iOS 16 no longer crashes on `.snappy` / `.numericText()` (those are availability-gated).
+
+Sideload the **NOOPiOS** scheme again from this branch after `xcodegen generate`.
+
 ## 1.3 — iPhone app, and a WHOOP import that actually fills Today
 
 If you sideloaded before and Today stayed empty after a WHOOP export, that was

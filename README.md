@@ -159,7 +159,7 @@ import required.
 |---|---|
 | **macOS** | ✅ Full app (`Strand/`, SwiftUI, macOS 13+). Pairs over BLE, offloads the strap's history, and scores recovery / strain / sleep on-device. The complete feature set above runs here. |
 | **Android** | ✅ Full app (`android/`, Jetpack Compose, Android 8+). Pairs over BLE, persists and scores on-device, and imports WHOOP / Apple Health / Health Connect. Grab the APK from [Releases](../../releases). |
-| **iPhone** | ✅ App target (`StrandiOS/` + shared `Strand/` screens, iOS 16+). Sideload with Xcode (scheme **NOOPiOS**). Import a WHOOP `.zip` from Files, or pair the strap from Live. |
+| **iPhone** | ✅ App target (`StrandiOS/` + shared `Strand/` screens, iOS 16+). Sideload with Xcode (scheme **NOOPiOS**). Import a WHOOP `.zip` from Files, or pair the strap from Live. Rebuild after 1.3.1 — the first sideload was a Mac memory budget and crashed. |
 
 ### What to expect when you start
 
@@ -281,6 +281,8 @@ open Strand.xcodeproj
 4. On the phone: Settings → General → VPN & Device Management → trust your developer cert.
 5. In the app: **More → Data Sources → Choose export…** and pick the `.zip` from [app.whoop.com](https://app.whoop.com) → Data Management (save it to Files first, via Safari or AirDrop).
 6. Today should show recovery / strain / sleep for the latest finished day. If a previous import looks empty, tap **Start over** and import again.
+
+If an earlier sideload was slow or crashed, rebuild this branch — that build was the Mac app's memory budget running on a phone.
 
 Live heart rate needs a physical iPhone and the official WHOOP app closed (one host at a time). The Simulator can test import; it cannot talk to the strap.
 

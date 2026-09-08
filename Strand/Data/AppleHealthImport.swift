@@ -9,7 +9,10 @@ enum AppleHealthImport {
 
     @discardableResult
     static func importExport(url: URL, into store: WhoopStore, deviceId: String) async throws -> ImportSummary {
-        let result = try ImportCoordinator().importAppleHealth(from: url)
+        // SAX parse of a multi-hundred-MB export.xml must not run on the main actor.
+        let result = try await Task.detached(priority: .userInitiated) {
+            try ImportCoordinator().importAppleHealth(from: url)
+        }.value
         let daily = AppleHealthAggregator.aggregate(result)
 
         // Apple-specific daily aggregates (steps/energy/vo2/hr/weight).

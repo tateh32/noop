@@ -36,7 +36,10 @@ final class IntelligenceEngine: ObservableObject {
     /// Compute on-device scores for each of the last `maxDays` that actually has raw HR data.
     /// Personal baselines (HRV / resting HR) are folded from the imported history, so even the first
     /// live night can be scored against your norm.
-    func analyzeRecent(maxDays: Int = 21) async {
+    ///
+    /// Heavy sleep-staging runs off the main actor. On iPhone we score fewer nights and cap the
+    /// per-stream sample count so a 14-day BLE offload cannot jetsam the process.
+    func analyzeRecent(maxDays: Int = PhoneBudget.intelligenceDays) async {
         guard let store = await repo.storeHandle() else { note = "No on-device store yet."; return }
         guard let hrvCfg = Baselines.metricCfg["hrv"],
               let rhrCfg = Baselines.metricCfg["resting_hr"] else { return }
@@ -58,6 +61,7 @@ final class IntelligenceEngine: ObservableObject {
         var out: [Computed] = []
         var dailies: [DailyMetric] = []
         var cachedSleep: [CachedSleepSession] = []
+        let sampleLimit = PhoneBudget.intelligenceSampleLimit
 
         for offset in 0..<maxDays {
             let dayStart = now - offset * 86_400
@@ -66,19 +70,20 @@ final class IntelligenceEngine: ObservableObject {
             let from = dayStart - 30 * 3_600
             let to = dayStart + 12 * 3_600
 
-            let hr = (try? await store.hrSamples(deviceId: deviceId, from: from, to: to, limit: 200_000)) ?? []
+            let hr = (try? await store.hrSamples(deviceId: deviceId, from: from, to: to, limit: sampleLimit)) ?? []
             guard hr.count >= 200 else { continue }   // need real raw data, not a stray sample
-            let rr = (try? await store.rrIntervals(deviceId: deviceId, from: from, to: to, limit: 200_000)) ?? []
-            let resp = (try? await store.respSamples(deviceId: deviceId, from: from, to: to, limit: 200_000)) ?? []
-            let grav = (try? await store.gravitySamples(deviceId: deviceId, from: from, to: to, limit: 200_000)) ?? []
+            let rr = (try? await store.rrIntervals(deviceId: deviceId, from: from, to: to, limit: sampleLimit)) ?? []
+            let resp = (try? await store.respSamples(deviceId: deviceId, from: from, to: to, limit: sampleLimit)) ?? []
+            let grav = (try? await store.gravitySamples(deviceId: deviceId, from: from, to: to, limit: sampleLimit)) ?? []
 
-            let res = AnalyticsEngine.analyzeDay(day: day, hr: hr, rr: rr, resp: resp, gravity: grav,
-                                                 profile: up, baselines: baselines, maxHROverride: maxHR)
+            let res = await Self.analyzeDayOffMain(day: day, hr: hr, rr: rr, resp: resp, gravity: grav,
+                                                   profile: up, baselines: baselines, maxHROverride: maxHR)
             out.append(Computed(day: day, recovery: res.recovery, strain: res.strain,
                                 sleepMin: res.daily.totalSleepMin, hrv: res.daily.avgHrv,
                                 rhr: res.daily.restingHr))
             dailies.append(res.daily)
             cachedSleep.append(contentsOf: res.cachedSleep)
+            await Task.yield()
         }
 
         // Persist the computed scores under a dedicated "-noop" source so the WHOLE dashboard
@@ -96,5 +101,22 @@ final class IntelligenceEngine: ObservableObject {
 
         // Reload the dashboard caches so the freshly computed scores show up immediately.
         if !dailies.isEmpty { await repo.refresh() }
+    }
+
+    /// Sleep staging a night of 1 Hz samples is CPU-heavy; never run it on the main actor.
+    private static func analyzeDayOffMain(
+        day: String, hr: [HRSample], rr: [RRInterval],
+        resp: [RespSample], gravity: [GravitySample],
+        profile: UserProfile, baselines: AnalyticsEngine.ProfileBaselines,
+        maxHROverride: Double?
+    ) async -> AnalyticsEngine.DayResult {
+        await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .utility).async {
+                let result = AnalyticsEngine.analyzeDay(
+                    day: day, hr: hr, rr: rr, resp: resp, gravity: gravity,
+                    profile: profile, baselines: baselines, maxHROverride: maxHROverride)
+                cont.resume(returning: result)
+            }
+        }
     }
 }

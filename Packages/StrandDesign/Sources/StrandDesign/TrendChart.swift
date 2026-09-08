@@ -9,8 +9,11 @@ import Charts
 // any gradient + value-range can be supplied for HRV/RHR/etc.
 
 /// One point on a trend line.
-public struct TrendPoint: Identifiable, Sendable {
-    public let id = UUID()
+///
+/// Identity is the timestamp, not a fresh UUID — a UUID-per-construct made SwiftUI
+/// treat every chart rebuild as a full data replacement (jank + extra memory).
+public struct TrendPoint: Identifiable, Sendable, Equatable {
+    public var id: TimeInterval { date.timeIntervalSince1970 }
     public var date: Date
     public var value: Double
 

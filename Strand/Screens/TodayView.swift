@@ -29,6 +29,7 @@ struct TodayView: View {
     @State private var sparks: [String: [Double]] = [:]
     @State private var workouts: [WorkoutRow] = []
     @State private var appleDays: [AppleDaily] = []
+    @State private var readiness: ReadinessEngine.Readiness?
 
     // Support sheet (donate + contact) — always reachable from the home toolbar.
     @State private var showingSupport = false
@@ -95,8 +96,7 @@ struct TodayView: View {
 
     @ViewBuilder
     private var readinessSection: some View {
-        let r = ReadinessEngine.evaluate(days: repo.days)
-        if r.level != .insufficient {
+        if let r = readiness, r.level != .insufficient {
             VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                 SectionHeader("Readiness", overline: "Should you push today?")
                 NoopCard {
@@ -348,7 +348,9 @@ struct TodayView: View {
     // MARK: - Loading
 
     private func loadAll() async {
-        // 14-day sparklines — Whoop.
+        readiness = ReadinessEngine.evaluate(days: repo.days)
+
+        // 14-day sparklines — Whoop. Query a short window, not the full import.
         sparks["recovery"]        = await sparkValues("recovery", source: "my-whoop", window: 14)
         sparks["strain"]          = await sparkValues("strain", source: "my-whoop", window: 14)
         sparks["sleep_total_min"] = await sparkValues("sleep_total_min", source: "my-whoop", window: 14)
@@ -362,15 +364,15 @@ struct TodayView: View {
         sparks["weight"]      = await sparkValues("weight", source: "apple-health", window: 90)
         sparks["active_kcal"] = await sparkValues("active_kcal", source: "apple-health", window: 14)
 
-        workouts = await repo.workoutRows()
-        appleDays = await repo.appleDailyRows()
+        workouts = await repo.workoutRows(days: PhoneBudget.workoutQueryDays)
+        appleDays = await repo.appleDailyRows(days: PhoneBudget.sparkQueryDays)
     }
 
     /// Trailing-window values for a metric, with the sparse-data fallback:
-    /// if the trailing window has <2 points, fall back to ALL history so sparse
-    /// series (weight) still render a value + line instead of an empty state.
+    /// if the trailing window has <2 points, fall back to a longer (still capped)
+    /// history so sparse series (weight) still render a value + line.
     private func sparkValues(_ key: String, source: String, window: Int) async -> [Double] {
-        let all = await repo.series(key: key, source: source)   // full history, asc
+        let all = await repo.series(key: key, source: source, days: PhoneBudget.sparkQueryDays)
         guard !all.isEmpty else { return [] }
         let windowed = trailingWindow(all, days: window)
         let chosen = windowed.count >= 2 ? windowed : all

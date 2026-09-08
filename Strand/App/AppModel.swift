@@ -73,10 +73,13 @@ final class AppModel: ObservableObject {
         // Turn the strap's offloaded raw data into dashboard scores on launch and every 15
         // minutes, so recovery / strain / sleep populate from the strap itself with no import.
         // IntelligenceEngine computes, persists under "my-whoop-noop", and refreshes the dashboard.
+        // On iPhone wait longer before the first pass so Today can paint, and never score on
+        // the main actor (see IntelligenceEngine.analyzeDayOffMain).
         Task { [weak self] in
             guard let self else { return }
             await self.repo.refresh()                          // surface any imported data at once
-            try? await Task.sleep(nanoseconds: 6_000_000_000)  // give the first offload a moment
+            let firstDelay: UInt64 = PhoneBudget.isPhone ? 20_000_000_000 : 6_000_000_000
+            try? await Task.sleep(nanoseconds: firstDelay)
             while !Task.isCancelled {
                 await self.intelligence.analyzeRecent()
                 try? await Task.sleep(nanoseconds: 900_000_000_000)  // 15 min, matches the offload cadence

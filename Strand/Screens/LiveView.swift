@@ -68,8 +68,7 @@ struct LiveView: View {
                 Text(displayHR.map(String.init) ?? "—")
                     .font(.system(size: 96, weight: .semibold).monospacedDigit())
                     .foregroundStyle(displayHR == nil ? StrandPalette.textTertiary : StrandPalette.accent)
-                    .contentTransition(.numericText())
-                    .animation(.snappy, value: displayHR)
+                    .noopNumericText(value: displayHR)
                 Text("bpm").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                 if !live.rr.isEmpty {
                     Text("R-R: " + live.rr.suffix(4).map(String.init).joined(separator: " · ") + " ms")

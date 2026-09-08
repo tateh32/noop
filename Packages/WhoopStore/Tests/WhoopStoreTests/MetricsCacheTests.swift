@@ -189,4 +189,23 @@ final class MetricsCacheTests: XCTestCase {
         XCTAssertEqual(hr.count, 1)
         XCTAssertEqual(hr[0].bpm, 60)
     }
+
+    func testFileStoreMmapMatchesPlatformBudget() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("noop-mmap-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("whoop.sqlite").path
+        let store = try await WhoopStore(path: path)
+        _ = try await store.tableNames()
+        let mmap = try await store.mmapSize()
+        XCTAssertEqual(mmap, Int64(SQLiteTuning.mmapBytes))
+        #if os(iOS)
+        XCTAssertEqual(SQLiteTuning.mmapBytes, 0, "iPhone must not mmap 256 MB (jetsam)")
+        XCTAssertEqual(SQLiteTuning.pageCacheKib, 4_000)
+        #else
+        XCTAssertEqual(SQLiteTuning.mmapBytes, 268_435_456)
+        XCTAssertEqual(SQLiteTuning.pageCacheKib, 16_000)
+        #endif
+    }
 }

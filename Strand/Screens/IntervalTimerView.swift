@@ -154,8 +154,7 @@ struct IntervalTimerView: View {
                         Text(isFinished ? "✓" : "\(remaining)")
                             .font(StrandFont.number(96, weight: .bold))
                             .foregroundStyle(isFinished ? StrandPalette.statusPositive : StrandPalette.textPrimary)
-                            .contentTransition(.numericText())
-                            .animation(.snappy, value: remaining)
+                            .noopNumericText(value: remaining)
                             .monospacedDigit()
                         Text(isFinished ? "SESSION DONE" : "SECONDS")
                             .font(StrandFont.footnote)
@@ -369,10 +368,15 @@ struct IntervalTimerView: View {
     }
 
     private func finishSession() {
-        withAnimation(.snappy) {
+        let apply = {
             phase = .done
             remaining = 0
             running = false
+        }
+        if #available(iOS 17.0, macOS 14.0, *) {
+            withAnimation(.snappy, apply)
+        } else {
+            withAnimation(.easeOut(duration: 0.2), apply)
         }
         buzz(loops: 5)                      // long completion cue
     }

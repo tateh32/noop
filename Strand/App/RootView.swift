@@ -129,7 +129,8 @@ struct NavDetail: View {
 }
 
 #if os(iOS)
-/// iPhone shell: five tabs. Everything else lives under More so import is one tap away.
+/// iPhone shell: five tabs. Only the selected tab is mounted — iOS TabView otherwise
+/// keeps Today + Sleep + Trends + Live alive together (charts, heat-strip, 1 Hz HR).
 private struct iPhoneRoot: View {
     private enum Tab: Hashable {
         case today, sleep, trends, live, more
@@ -139,25 +140,35 @@ private struct iPhoneRoot: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            NavigationStack { TodayView() }
-                .tabItem { Label("Today", systemImage: NavItem.today.icon) }
-                .tag(Tab.today)
+            NavigationStack {
+                if tab == .today { TodayView() } else { Color.clear }
+            }
+            .tabItem { Label("Today", systemImage: NavItem.today.icon) }
+            .tag(Tab.today)
 
-            NavigationStack { SleepView() }
-                .tabItem { Label("Sleep", systemImage: NavItem.sleep.icon) }
-                .tag(Tab.sleep)
+            NavigationStack {
+                if tab == .sleep { SleepView() } else { Color.clear }
+            }
+            .tabItem { Label("Sleep", systemImage: NavItem.sleep.icon) }
+            .tag(Tab.sleep)
 
-            NavigationStack { TrendsView() }
-                .tabItem { Label("Trends", systemImage: NavItem.trends.icon) }
-                .tag(Tab.trends)
+            NavigationStack {
+                if tab == .trends { TrendsView() } else { Color.clear }
+            }
+            .tabItem { Label("Trends", systemImage: NavItem.trends.icon) }
+            .tag(Tab.trends)
 
-            NavigationStack { LiveView() }
-                .tabItem { Label("Live", systemImage: NavItem.live.icon) }
-                .tag(Tab.live)
+            NavigationStack {
+                if tab == .live { LiveView() } else { Color.clear }
+            }
+            .tabItem { Label("Live", systemImage: NavItem.live.icon) }
+            .tag(Tab.live)
 
-            NavigationStack { MoreMenuView() }
-                .tabItem { Label("More", systemImage: "ellipsis.circle.fill") }
-                .tag(Tab.more)
+            NavigationStack {
+                if tab == .more { MoreMenuView() } else { Color.clear }
+            }
+            .tabItem { Label("More", systemImage: "ellipsis.circle.fill") }
+            .tag(Tab.more)
         }
         .tint(StrandPalette.accent)
     }
