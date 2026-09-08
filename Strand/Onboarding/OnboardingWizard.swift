@@ -43,6 +43,7 @@ public struct OnboardingWizard: View {
     }
 
     @State private var step: Step = .welcome
+    @Environment(\.noopAppearance) private var appearance
     @State private var glow = false
 
     public var body: some View {
@@ -83,7 +84,7 @@ public struct OnboardingWizard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(StrandPalette.surfaceBase.ignoresSafeArea())
+        .background { NoopScreenBackground() }
         .preferredColorScheme(.dark)
         .onAppear { glow = true }
         // Isolated live observation — a hidden watcher slides Scan → celebration on bond
@@ -107,27 +108,30 @@ public struct OnboardingWizard: View {
     // MARK: Backgrounds
 
     private var background: some View {
-        ZStack {
-            StrandPalette.surfaceBase
-            // A slow ambient bloom that breathes — the substrate feels alive.
-            RadialGradient(
-                colors: [StrandPalette.glowAmbient.opacity(0.55), .clear],
-                center: .center,
-                startRadius: 40,
-                endRadius: glow ? 620 : 480
-            )
-            .blendMode(StrandPerf.reducedEffects ? .normal : .plusLighter)
-            .opacity(glow ? 0.9 : 0.6)
-            .animation(StrandPerf.reducedEffects ? nil : StrandMotion.breathe, value: glow)
-            .ignoresSafeArea()
-
-            // A faint indigo wash from the top — instrument-grade depth.
-            LinearGradient(
-                colors: [StrandPalette.accentMuted.opacity(0.20), .clear],
-                startPoint: .top,
-                endPoint: .center
-            )
-            .ignoresSafeArea()
+        Group {
+            if appearance.isGlass {
+                NoopScreenBackground()
+            } else {
+                ZStack {
+                    StrandPalette.surfaceBase
+                    RadialGradient(
+                        colors: [StrandPalette.glowAmbient.opacity(0.55), .clear],
+                        center: .center,
+                        startRadius: 40,
+                        endRadius: glow ? 620 : 480
+                    )
+                    .blendMode(StrandPerf.reducedEffects ? .normal : .plusLighter)
+                    .opacity(glow ? 0.9 : 0.6)
+                    .animation(StrandPerf.reducedEffects ? nil : StrandMotion.breathe, value: glow)
+                    .ignoresSafeArea()
+                    LinearGradient(
+                        colors: [StrandPalette.accentMuted.opacity(0.20), .clear],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                    .ignoresSafeArea()
+                }
+            }
         }
     }
 

@@ -24,6 +24,7 @@ import Foundation
 
 struct TodayView: View {
     @EnvironmentObject var repo: Repository
+    @Environment(\.noopAppearance) private var appearance
 
     // 14-day sparkline series, keyed by metric key. Loaded once in .task.
     @State private var sparks: [String: [Double]] = [:]
@@ -196,7 +197,7 @@ struct TodayView: View {
                         category: "Recovery",
                         status: synthesisWord(score),
                         detail: synthesisDetail(d),
-                        statusColor: score.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.textTertiary
+                        statusColor: score.map { StrandPalette.recoveryColor($0, appearance: appearance) } ?? StrandPalette.textTertiary
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -206,7 +207,7 @@ struct TodayView: View {
                     category: "Recovery",
                     status: synthesisWord(score),
                     detail: synthesisDetail(d),
-                    statusColor: score.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.textTertiary
+                    statusColor: score.map { StrandPalette.recoveryColor($0, appearance: appearance) } ?? StrandPalette.textTertiary
                 )
             }
         }
@@ -225,7 +226,7 @@ struct TodayView: View {
                     label: "Recovery",
                     value: d?.recovery.map { "\(Int($0.rounded()))%" } ?? "—",
                     caption: d?.recovery.map { StrandPalette.recoveryState($0).capitalized },
-                    accent: d?.recovery.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.textPrimary,
+                    accent: d?.recovery.map { StrandPalette.recoveryColor($0, appearance: appearance) } ?? StrandPalette.textPrimary,
                     sparkline: sparks["recovery"],
                     sparkColor: StrandPalette.accent
                 )

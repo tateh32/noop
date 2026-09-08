@@ -44,6 +44,8 @@ public struct RecoveryRing: View {
         self.valueFormat = valueFormat
     }
 
+    @Environment(\.noopAppearance) private var appearance
+
     /// Cursor location while hovering, in ring-local coordinates.
     @State private var hoverPoint: CGPoint? = nil
 
@@ -58,7 +60,8 @@ public struct RecoveryRing: View {
     @State private var bloomPulse: Bool = false
 
     private var fraction: Double { min(max(score / 100.0, 0), 1) }
-    private var tipColor: Color { StrandPalette.recoveryColor(score) }
+    private var tipColor: Color { StrandPalette.recoveryColor(score, appearance: appearance) }
+    private var ringGradient: Gradient { StrandPalette.recoveryGradient(for: appearance) }
     private var stateWord: String { StrandPalette.recoveryState(score) }
     /// Bloom intensity 0.18...0.55 scaled by score.
     private var bloomOpacity: Double { 0.18 + 0.37 * fraction }
@@ -83,6 +86,7 @@ public struct RecoveryRing: View {
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Rectangle())
+        .shadow(color: appearance.isGlass ? tipColor.opacity(0.32) : .clear, radius: 20, y: 10)
         .noopContinuousHover { phase in
             guard showsHover else { return }
             switch phase {
@@ -117,7 +121,7 @@ public struct RecoveryRing: View {
                 arcShape(to: animatedFraction)
                     .stroke(
                         AngularGradient(
-                            gradient: StrandPalette.recoveryGradient,
+                            gradient: ringGradient,
                             center: .center,
                             startAngle: startAngle,
                             endAngle: endAngle
@@ -141,7 +145,7 @@ public struct RecoveryRing: View {
             arcShape(to: animatedFraction)
                 .stroke(
                     AngularGradient(
-                        gradient: StrandPalette.recoveryGradient,
+                        gradient: ringGradient,
                         center: .center,
                         startAngle: startAngle,
                         endAngle: endAngle
@@ -190,7 +194,7 @@ public struct RecoveryRing: View {
     private var centerLabel: some View {
         VStack(spacing: 2) {
             Text(numberString)
-                .font(StrandFont.display(diameter * 0.30))
+                .font(StrandFont.display(diameter * 0.30, rounded: appearance.isGlass))
                 .foregroundStyle(StrandPalette.textPrimary)
                 .noopNumericText(value: numberString)
             Text(stateWord)

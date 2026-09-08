@@ -4,8 +4,24 @@ import SwiftUI
 
 final class StrandDesignTests: XCTestCase {
 
-    func testVersion() {
-        XCTAssertEqual(StrandDesign.version, "0.1.0")
+    func testAppearanceRoundTrip() {
+        XCTAssertEqual(NoopAppearance(rawValue: "classic"), .classic)
+        XCTAssertEqual(NoopAppearance(rawValue: "glass"), .glass)
+        XCTAssertEqual(NoopAppearance.classic.label, "Classic")
+        XCTAssertEqual(NoopAppearance.glass.label, "Glass")
+        XCTAssertFalse(NoopAppearance.classic.isGlass)
+        XCTAssertTrue(NoopAppearance.glass.isGlass)
+        XCTAssertEqual(NoopAppearance.classic.cardRadius, 16)
+        XCTAssertEqual(NoopAppearance.glass.cardRadius, 28)
+    }
+
+    func testGlassRecoveryUsesIndigoCyan() {
+        let stops = StrandPalette.recoveryStops(for: .glass)
+        XCTAssertEqual(stops.count, 2)
+        XCTAssertEqual(stops.first?.location, 0)
+        XCTAssertEqual(stops.last?.location, 1)
+        let classic = StrandPalette.recoveryStops(for: .classic)
+        XCTAssertEqual(classic.count, 5)
     }
 
     func testHexParsing() {

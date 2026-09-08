@@ -79,7 +79,7 @@ struct RootView: View {
         } detail: {
             NavDetail(item: selection ?? .today)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(StrandPalette.surfaceBase.ignoresSafeArea())
+                .background { NoopScreenBackground() }
         }
         .task { await repo.refresh() }
         #endif
@@ -136,6 +136,7 @@ private struct iPhoneRoot: View {
         case today, sleep, trends, live, more
     }
 
+    @Environment(\.noopAppearance) private var appearance
     @State private var tab: Tab = .today
 
     var body: some View {
@@ -143,34 +144,63 @@ private struct iPhoneRoot: View {
             NavigationStack {
                 if tab == .today { TodayView() } else { Color.clear }
             }
-            .tabItem { Label("Today", systemImage: NavItem.today.icon) }
+            .tabItem {
+                Label("Today", systemImage: NavItem.today.icon)
+                    .symbolRenderingMode(.hierarchical)
+            }
             .tag(Tab.today)
 
             NavigationStack {
                 if tab == .sleep { SleepView() } else { Color.clear }
             }
-            .tabItem { Label("Sleep", systemImage: NavItem.sleep.icon) }
+            .tabItem {
+                Label("Sleep", systemImage: NavItem.sleep.icon)
+                    .symbolRenderingMode(.hierarchical)
+            }
             .tag(Tab.sleep)
 
             NavigationStack {
                 if tab == .trends { TrendsView() } else { Color.clear }
             }
-            .tabItem { Label("Trends", systemImage: NavItem.trends.icon) }
+            .tabItem {
+                Label("Trends", systemImage: NavItem.trends.icon)
+                    .symbolRenderingMode(.hierarchical)
+            }
             .tag(Tab.trends)
 
             NavigationStack {
                 if tab == .live { LiveView() } else { Color.clear }
             }
-            .tabItem { Label("Live", systemImage: NavItem.live.icon) }
+            .tabItem {
+                Label("Live", systemImage: NavItem.live.icon)
+                    .symbolRenderingMode(.hierarchical)
+            }
             .tag(Tab.live)
 
             NavigationStack {
                 if tab == .more { MoreMenuView() } else { Color.clear }
             }
-            .tabItem { Label("More", systemImage: "ellipsis.circle.fill") }
+            .tabItem {
+                Label("More", systemImage: "ellipsis.circle.fill")
+                    .symbolRenderingMode(.hierarchical)
+            }
             .tag(Tab.more)
         }
-        .tint(StrandPalette.accent)
+        .tint(appearance.accent)
+        .modifier(GlassTabChrome(enabled: appearance.isGlass))
+    }
+}
+
+private struct GlassTabChrome: ViewModifier {
+    var enabled: Bool
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+                .toolbarBackground(.visible, for: .tabBar)
+        } else {
+            content
+        }
     }
 }
 
@@ -194,7 +224,7 @@ private struct MoreMenuView: View {
         }
         .navigationTitle("More")
         .scrollContentBackground(.hidden)
-        .background(StrandPalette.surfaceBase)
+        .background { NoopScreenBackground() }
     }
 }
 #endif

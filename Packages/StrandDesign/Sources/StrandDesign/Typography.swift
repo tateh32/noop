@@ -11,9 +11,15 @@ public enum StrandFont {
 
     // MARK: Scale (§9.2)
 
+    /// A monospaced-digit numeric style at an arbitrary size/weight, for live values.
+    /// Pass `rounded: true` for the Glass theme (SF Pro Rounded, bold).
+    public static func number(_ size: CGFloat, weight: Font.Weight = .semibold, rounded: Bool = false) -> Font {
+        .system(size: size, weight: rounded ? .bold : weight, design: rounded ? .rounded : .default).monospacedDigit()
+    }
+
     /// Display 64–80 / Semibold — the recovery ring number. Tabular digits.
-    public static func display(_ size: CGFloat = 72) -> Font {
-        .system(size: size, weight: .semibold, design: .default).monospacedDigit()
+    public static func display(_ size: CGFloat = 72, rounded: Bool = false) -> Font {
+        .system(size: size, weight: rounded ? .bold : .semibold, design: rounded ? .rounded : .default).monospacedDigit()
     }
 
     /// Title1 28 / Bold.
@@ -45,11 +51,6 @@ public enum StrandFont {
     public static let mono = Font.system(size: 13, weight: .regular, design: .monospaced)
 
     // MARK: Numeric variants (tabular digits)
-
-    /// A monospaced-digit numeric style at an arbitrary size/weight, for live values.
-    public static func number(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
-        .system(size: size, weight: weight, design: .default).monospacedDigit()
-    }
 
     /// Monospaced-digit body — for inline live values that should align.
     public static let bodyNumber = Font.system(size: 15, weight: .regular).monospacedDigit()

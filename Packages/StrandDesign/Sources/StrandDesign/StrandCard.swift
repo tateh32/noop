@@ -2,19 +2,19 @@ import SwiftUI
 
 // MARK: - StrandCard (§9.4 Cards)
 //
-// The card container: surface.raised, 16pt radius, 1px hairline border, and the
-// mandated hover lift (shadow + translateY(-1px)) with a hairline → hairline.strong
-// border transition. Use `.strandCardHover()` to add the lift to any view.
+// Classic: surface.raised, 16pt radius, hairline, hover lift on Mac.
+// Glass: ultraThinMaterial, larger continuous radius, specular edge.
 
 public struct StrandCard<Content: View>: View {
 
     public var padding: CGFloat
-    public var cornerRadius: CGFloat
+    public var cornerRadius: CGFloat?
     @ViewBuilder public var content: () -> Content
+    @Environment(\.noopAppearance) private var appearance
 
     public init(
         padding: CGFloat = 16,
-        cornerRadius: CGFloat = 16,
+        cornerRadius: CGFloat? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.padding = padding
@@ -22,12 +22,27 @@ public struct StrandCard<Content: View>: View {
         self.content = content
     }
 
+    private var radius: CGFloat { cornerRadius ?? appearance.cardRadius }
+
     public var body: some View {
-        content()
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(StrandPalette.surfaceRaised, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .strandCardHover(cornerRadius: cornerRadius)
+        let r = radius
+        if appearance.isGlass {
+            content()
+                .padding(padding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: r, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                )
+                .overlay { NoopGlassStroke(cornerRadius: r) }
+                .shadow(color: Color.black.opacity(0.22), radius: 16, y: 8)
+        } else {
+            content()
+                .padding(padding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(StrandPalette.surfaceRaised, in: RoundedRectangle(cornerRadius: r, style: .continuous))
+                .strandCardHover(cornerRadius: r)
+        }
     }
 }
 
