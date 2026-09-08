@@ -1,6 +1,9 @@
 import SwiftUI
 import StrandDesign
 import WhoopStore
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Settings — profile (powers zones / calories / recovery), strap connection, and about.
 /// Grouped cards on surface.raised with a two-column form feel.
@@ -24,6 +27,7 @@ struct SettingsView: View {
     var body: some View {
         ScreenScaffold(title: "Settings",
                        subtitle: "Your numbers, your strap, and how NOOP works. All on \(DeviceCopy.here).") {
+            lookCard
             profileCard
             strapCard
             experimentalCard
@@ -39,6 +43,18 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showWhatsNew) {
             WhatsNewView(onClose: { showWhatsNew = false })
+        }
+    }
+
+    // MARK: - Look
+
+    private var lookCard: some View {
+        SettingsSection(
+            icon: "circle.lefthalf.filled",
+            title: "Look",
+            blurb: "Glass is the new Health-style frosted look. Classic is the original dark instrument theme — switch back any time; nothing is deleted."
+        ) {
+            AppearancePicker()
         }
     }
 
@@ -419,6 +435,39 @@ struct SettingsView: View {
     }
 }
 
+private struct AppearancePicker: View {
+    @AppStorage(NoopAppearance.storageKey) private var appearanceRaw = NoopAppearance.platformDefault.rawValue
+    @Environment(\.noopAppearance) private var injected
+
+    private var selection: Binding<NoopAppearance> {
+        Binding(
+            get: { NoopAppearance(rawValue: appearanceRaw) ?? .platformDefault },
+            set: { newValue in
+                appearanceRaw = newValue.rawValue
+                #if os(iOS)
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                #endif
+            }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("Look", selection: selection) {
+                ForEach(NoopAppearance.allCases) { look in
+                    Text(look.label).tag(look)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("Look")
+            Text((NoopAppearance(rawValue: appearanceRaw) ?? injected).detail)
+                .font(StrandFont.footnote)
+                .foregroundStyle(StrandPalette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 // MARK: - Section card
 
 /// A grouped settings card: icon + title header, an explanatory blurb, then content.
@@ -427,13 +476,15 @@ private struct SettingsSection<Content: View>: View {
     let title: String
     let blurb: String
     @ViewBuilder var content: () -> Content
+    @Environment(\.noopAppearance) private var appearance
 
     var body: some View {
         StrandCard(padding: 20) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
                     Image(systemName: icon)
-                        .foregroundStyle(StrandPalette.accent)
+                        .foregroundStyle(appearance.accent)
+                        .symbolRenderingMode(.hierarchical)
                         .accessibilityHidden(true)
                     Text(title)
                         .font(StrandFont.headline)

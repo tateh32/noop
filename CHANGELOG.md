@@ -17,6 +17,15 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.3.4 — Glass look, Classic still one tap away
+
+Liquid Glass / Health-style cards on iPhone, without throwing the original
+theme away. Settings → Look switches **Glass** (frosted materials, rounded
+metric numbers, indigo–cyan recovery) and **Classic** (the dark instrument
+look). Classic is the default on Mac; Glass is the default on iPhone.
+
+System materials only — not the custom forever-blur that hitching Today.
+
 ## 1.3.3 — iPhone review pass before the next sideload
 
 A full pass over the iPhone target after 1.3.2. Three things would have bitten on device:

@@ -123,15 +123,51 @@ public enum StrandPalette {
 
     // MARK: - Sampling helpers
 
-    /// Sample the recovery gradient (indigo → mint) at a recovery score 0...100.
-    /// Returns the exact interpolated color used everywhere recovery is tinted.
+    /// Sample the recovery gradient at a recovery score 0...100.
     public static func recoveryColor(_ score: Double) -> Color {
-        sample(stops: recoveryStops, at: score / 100.0)
+        recoveryColor(score, appearance: .classic)
+    }
+
+    public static func recoveryColor(_ score: Double, appearance: NoopAppearance) -> Color {
+        sample(stops: recoveryStops(for: appearance), at: score / 100.0)
+    }
+
+    public static func recoveryGradient(for appearance: NoopAppearance) -> Gradient {
+        Gradient(stops: recoveryStops(for: appearance))
+    }
+
+    /// Glass recovery is indigo → cyan (Health sleep/recovery token). Classic is the traffic light.
+    public static func recoveryStops(for appearance: NoopAppearance) -> [Gradient.Stop] {
+        if appearance.isGlass {
+            return [
+                .init(color: Color.indigo, location: 0.00),
+                .init(color: Color.cyan, location: 1.00),
+            ]
+        }
+        return recoveryStops
     }
 
     /// Sample the strain gradient at a strain value on the 0...21 Whoop scale.
     public static func strainColor(_ strain: Double) -> Color {
-        sample(stops: strainStops, at: strain / 21.0)
+        strainColor(strain, appearance: .classic)
+    }
+
+    public static func strainColor(_ strain: Double, appearance: NoopAppearance) -> Color {
+        sample(stops: strainStops(for: appearance), at: strain / 21.0)
+    }
+
+    public static func strainGradient(for appearance: NoopAppearance) -> Gradient {
+        Gradient(stops: strainStops(for: appearance))
+    }
+
+    public static func strainStops(for appearance: NoopAppearance) -> [Gradient.Stop] {
+        if appearance.isGlass {
+            return [
+                .init(color: Color.orange, location: 0.00),
+                .init(color: Color.red, location: 1.00),
+            ]
+        }
+        return strainStops
     }
 
     /// The state word for a recovery score, per spec §9.3.

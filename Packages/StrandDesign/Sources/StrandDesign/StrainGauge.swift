@@ -39,6 +39,7 @@ public struct StrainGauge: View {
         self.valueFormat = valueFormat
     }
 
+    @Environment(\.noopAppearance) private var appearance
     /// Cursor location while hovering, in gauge-local coordinates.
     @State private var hoverPoint: CGPoint? = nil
 
@@ -61,7 +62,8 @@ public struct StrainGauge: View {
     @State private var bloomPulse = false
 
     private var fraction: Double { min(max(strain / 21.0, 0), 1) }
-    private var tipColor: Color { StrandPalette.strainColor(strain) }
+    private var tipColor: Color { StrandPalette.strainColor(strain, appearance: appearance) }
+    private var ringGradient: Gradient { StrandPalette.strainGradient(for: appearance) }
     private var bloomOpacity: Double { 0.16 + 0.34 * fraction }
     private var bloomRadius: CGFloat { lineWidth * (0.8 + 1.2 * fraction) }
 
@@ -84,6 +86,7 @@ public struct StrainGauge: View {
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Rectangle())
+        .shadow(color: appearance.isGlass ? tipColor.opacity(0.32) : .clear, radius: 20, y: 10)
         .noopContinuousHover { phase in
             guard showsHover else { return }
             switch phase {
@@ -114,7 +117,7 @@ public struct StrainGauge: View {
                 arc(to: animatedFraction)
                     .stroke(
                         AngularGradient(
-                            gradient: StrandPalette.strainGradient,
+                            gradient: ringGradient,
                             center: .center,
                             startAngle: startAngle,
                             endAngle: endAngle
@@ -134,7 +137,7 @@ public struct StrainGauge: View {
             arc(to: animatedFraction)
                 .stroke(
                     AngularGradient(
-                        gradient: StrandPalette.strainGradient,
+                        gradient: ringGradient,
                         center: .center,
                         startAngle: startAngle,
                         endAngle: endAngle
@@ -170,7 +173,7 @@ public struct StrainGauge: View {
     private var centerLabel: some View {
         VStack(spacing: 2) {
             Text(strainString)
-                .font(StrandFont.display(diameter * 0.26))
+                .font(StrandFont.display(diameter * 0.26, rounded: appearance.isGlass))
                 .foregroundStyle(StrandPalette.textPrimary)
                 .noopNumericText(value: strainString)
             Text("STRAIN")

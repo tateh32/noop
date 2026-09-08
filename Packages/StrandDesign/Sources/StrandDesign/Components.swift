@@ -21,6 +21,7 @@ public enum NoopMetrics {
 public struct NoopCard<Content: View>: View {
     private let padding: CGFloat
     @ViewBuilder private let content: () -> Content
+    @Environment(\.noopAppearance) private var appearance
     #if os(macOS)
     @State private var hover = false
     #endif
@@ -28,24 +29,36 @@ public struct NoopCard<Content: View>: View {
         self.padding = padding; self.content = content
     }
     public var body: some View {
-        #if os(iOS)
-        content()
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(StrandPalette.surfaceRaised, in: RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous)
-                .strokeBorder(StrandPalette.hairline, lineWidth: 1))
-        #else
-        content()
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(StrandPalette.surfaceRaised, in: RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous)
-                .strokeBorder(hover ? StrandPalette.hairlineStrong : StrandPalette.hairline, lineWidth: 1))
-            .shadow(color: .black.opacity(hover ? 0.25 : 0), radius: 10, y: 4)
-            .onHover { hover = $0 }
-            .animation(.easeOut(duration: 0.16), value: hover)
-        #endif
+        let r = appearance.cardRadius
+        if appearance.isGlass {
+            content()
+                .padding(padding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: r, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                )
+                .overlay { NoopGlassStroke(cornerRadius: r) }
+        } else {
+            #if os(iOS)
+            content()
+                .padding(padding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(StrandPalette.surfaceRaised, in: RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous)
+                    .strokeBorder(StrandPalette.hairline, lineWidth: 1))
+            #else
+            content()
+                .padding(padding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(StrandPalette.surfaceRaised, in: RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous)
+                    .strokeBorder(hover ? StrandPalette.hairlineStrong : StrandPalette.hairline, lineWidth: 1))
+                .shadow(color: .black.opacity(hover ? 0.25 : 0), radius: 10, y: 4)
+                .onHover { hover = $0 }
+                .animation(.easeOut(duration: 0.16), value: hover)
+            #endif
+        }
     }
 }
 
@@ -80,6 +93,7 @@ public struct StatTile: View {
     var deltaColor: Color = StrandPalette.textTertiary
     var sparkline: [Double]? = nil
     var sparkColor: Color = StrandPalette.accent
+    @Environment(\.noopAppearance) private var appearance
 
     public init(label: String, value: String, caption: String? = nil,
                 accent: Color = StrandPalette.textPrimary, delta: String? = nil,
@@ -94,9 +108,9 @@ public struct StatTile: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(label.uppercased()).strandOverline()
                 Spacer(minLength: 4)
-                Text(value).font(StrandFont.number(26)).foregroundStyle(accent).lineLimit(1).minimumScaleFactor(0.6)
+                Text(value).font(StrandFont.number(26, rounded: appearance.isGlass)).foregroundStyle(accent).lineLimit(1).minimumScaleFactor(0.6)
                 if let sparkline, sparkline.count > 1 {
-                    Sparkline(values: sparkline).frame(height: 22).padding(.top, 4)
+                    Sparkline(values: sparkline, gradient: StrandPalette.recoveryGradient(for: appearance)).frame(height: 22).padding(.top, 4)
                 }
                 HStack(spacing: 6) {
                     if let caption { Text(caption).font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary).lineLimit(1) }
@@ -193,6 +207,7 @@ public struct SegmentedPillControl<T: Hashable>: View {
     let items: [T]
     let label: (T) -> String
     @Binding var selection: T
+    @Environment(\.noopAppearance) private var appearance
     public init(_ items: [T], selection: Binding<T>, label: @escaping (T) -> String) {
         self.items = items; self._selection = selection; self.label = label
     }
@@ -200,20 +215,26 @@ public struct SegmentedPillControl<T: Hashable>: View {
         HStack(spacing: 4) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 let sel = item == selection
-                Button { withAnimation(StrandMotion.interactive) { selection = item } } label: {
+                Button { withAnimation(appearance.spring) { selection = item } } label: {
                     Text(label(item))
                         .font(StrandFont.captionNumber)
-                        .foregroundStyle(sel ? StrandPalette.surfaceBase : StrandPalette.textSecondary)
+                        .foregroundStyle(sel ? (appearance.isGlass ? Color.black.opacity(0.85) : StrandPalette.surfaceBase) : StrandPalette.textSecondary)
                         .frame(minWidth: 32)
                         .padding(.vertical, 6).padding(.horizontal, 11)
-                        .background(Capsule(style: .continuous).fill(sel ? StrandPalette.accent : Color.clear))
+                        .background(Capsule(style: .continuous).fill(sel ? appearance.accent : Color.clear))
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(3)
-        .background(StrandPalette.surfaceInset, in: Capsule(style: .continuous))
-        .overlay(Capsule(style: .continuous).strokeBorder(StrandPalette.hairline, lineWidth: 1))
+        .background {
+            if appearance.isGlass {
+                Capsule(style: .continuous).fill(.ultraThinMaterial)
+            } else {
+                Capsule(style: .continuous).fill(StrandPalette.surfaceInset)
+            }
+        }
+        .overlay(Capsule(style: .continuous).strokeBorder(appearance.isGlass ? Color.white.opacity(0.22) : StrandPalette.hairline, lineWidth: 1))
     }
 }
 

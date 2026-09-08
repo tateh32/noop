@@ -6,14 +6,19 @@ struct ScreenScaffold<Content: View>: View {
     let title: String
     var subtitle: String? = nil
     @ViewBuilder var content: () -> Content
+    @Environment(\.noopAppearance) private var appearance
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(StrandFont.title1).foregroundStyle(StrandPalette.textPrimary)
+                    Text(title)
+                        .font(StrandFont.title1)
+                        .foregroundStyle(appearance.isGlass ? Color.primary : StrandPalette.textPrimary)
                     if let subtitle {
-                        Text(subtitle).font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                        Text(subtitle)
+                            .font(StrandFont.subhead)
+                            .foregroundStyle(appearance.isGlass ? Color.secondary : StrandPalette.textSecondary)
                     }
                 }
                 content()
@@ -25,7 +30,7 @@ struct ScreenScaffold<Content: View>: View {
             #endif
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(StrandPalette.surfaceBase)
+        .background { NoopScreenBackground() }
     }
 }
 
@@ -33,14 +38,14 @@ struct ScreenScaffold<Content: View>: View {
 struct ComingSoon: View {
     let what: String
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Coming together")
-                .font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
-            Text(what)
-                .font(StrandFont.body).foregroundStyle(StrandPalette.textSecondary)
+        StrandCard(padding: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Coming together")
+                    .font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+                Text(what)
+                    .font(StrandFont.body).foregroundStyle(StrandPalette.textSecondary)
+            }
         }
-        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-        .background(StrandPalette.surfaceRaised, in: RoundedRectangle(cornerRadius: 14))
     }
 }
 

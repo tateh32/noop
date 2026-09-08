@@ -8,6 +8,7 @@ import WhoopProtocol
 struct LiveView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var live: LiveState
+    @Environment(\.noopAppearance) private var appearance
 
     /// Which strap the user is pairing — persists across launches. Drives which
     /// BLE service we scan for so a WHOOP 4.0 scan never hangs on a WHOOP 5 wrist.
@@ -66,8 +67,8 @@ struct LiveView: View {
                 Text("HEART RATE").font(StrandFont.overline).tracking(StrandFont.overlineTracking)
                     .foregroundStyle(StrandPalette.textSecondary)
                 Text(displayHR.map(String.init) ?? "—")
-                    .font(.system(size: 96, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(displayHR == nil ? StrandPalette.textTertiary : StrandPalette.accent)
+                    .font(StrandFont.display(96, rounded: appearance.isGlass))
+                    .foregroundStyle(displayHR == nil ? StrandPalette.textTertiary : appearance.accent)
                     .noopNumericText(value: displayHR)
                 Text("bpm").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                 if !live.rr.isEmpty {
