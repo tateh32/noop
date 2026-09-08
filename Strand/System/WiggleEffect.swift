@@ -7,6 +7,10 @@ struct WiggleEffect: ViewModifier {
     @State private var angle: Double = 0
 
     func body(content: Content) -> some View {
+        #if os(iOS)
+        // A 4-second Timer + spring on the home toolbar is free hitching on iPhone.
+        content
+        #else
         content
             .rotationEffect(.degrees(angle))
             .onReceive(Timer.publish(every: period, on: .main, in: .common).autoconnect()) { _ in
@@ -15,6 +19,7 @@ struct WiggleEffect: ViewModifier {
                     withAnimation(.spring(response: 0.22, dampingFraction: 0.55)) { angle = 0 }
                 }
             }
+        #endif
     }
 }
 

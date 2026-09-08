@@ -536,7 +536,7 @@ private struct RBar: View {
             }
         }
         .contentShape(Rectangle())
-        .onContinuousHover { phase in
+        .noopContinuousHover { phase in
             switch phase {
             case .active: hovering = true
             case .ended:  hovering = false

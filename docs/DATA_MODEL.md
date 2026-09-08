@@ -53,9 +53,9 @@ single `DatabaseQueue` and applies these PRAGMAs before any query runs:
 | --- | --- | --- |
 | `journal_mode` | `WAL` | Two handles to the same file (the BLE collector and the metrics repository) can read/write without deadlocking. |
 | `synchronous` | `NORMAL` | Durable pairing with WAL — only an OS crash or power loss can lose the last transaction. |
-| `cache_size` | `-16000` | ~16 MB page cache for multi-thousand-row import/backfill writes. |
-| `mmap_size` | `268435456` | 256 MB memory-mapped I/O. |
-| `temp_store` | `MEMORY` | In-memory temp tables. |
+| `cache_size` | `-16000` (Mac) / `-4000` (iOS) | Page cache. iOS is smaller so two open handles cannot jetsam the phone. |
+| `mmap_size` | `268435456` (Mac) / `0` (iOS) | 256 MB memory-mapped I/O on Mac. **Disabled on iOS** — mmap counts against the jetsam limit. |
+| `temp_store` | `MEMORY` (Mac) / `FILE` (iOS) | In-memory temp tables on Mac; on iPhone temps stay on disk. |
 | `busyMode` | `.timeout(5)` | 5-second busy timeout under write contention. |
 
 `WhoopStore` is an `actor`: all GRDB calls run on the actor's serial executor (off the main

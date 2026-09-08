@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.noopapp
   deploymentTarget:
     macOS: "13.0"
+    iOS: "16.0"
   createIntermediateGroups: true
   groupSortPosition: top
 settings:
@@ -64,6 +65,53 @@ targets:
         # distributed (ad-hoc) build. The app uses no JIT / unsigned-exec memory, so it's safe.
         ENABLE_HARDENED_RUNTIME: YES
         COMBINE_HIDPI_IMAGES: YES
+    dependencies:
+      - package: WhoopProtocol
+      - package: WhoopStore
+      - package: StrandAnalytics
+      - package: StrandImport
+      - package: StrandDesign
+  NOOPiOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Strand
+        excludes:
+          - App/StrandApp.swift
+          - MenuBar
+          - MenuBar/**
+          - Resources/Info.plist
+          - Resources/Strand.entitlements
+          - Resources/Assets.xcassets
+      - path: StrandiOS
+        excludes:
+          - Resources/Info.plist
+          - Resources/NOOP.entitlements
+    info:
+      path: StrandiOS/Resources/Info.plist
+      properties:
+        CFBundleName: NOOP
+        CFBundleDisplayName: NOOP
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIBackgroundModes:
+          - bluetooth-central
+        NSBluetoothAlwaysUsageDescription: "NOOP connects directly to your WHOOP strap over Bluetooth to read heart rate, R-R intervals, battery, and sensor data locally on this iPhone. Nothing leaves your device."
+        NSBluetoothPeripheralUsageDescription: "NOOP connects directly to your WHOOP strap over Bluetooth to read heart rate and sensor data locally on this iPhone. Nothing leaves your device."
+    entitlements:
+      path: StrandiOS/Resources/NOOP.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.noopapp.noop.ios
+        PRODUCT_NAME: NOOP
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        SUPPORTS_MACCATALYST: NO
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     dependencies:
       - package: WhoopProtocol
       - package: WhoopStore

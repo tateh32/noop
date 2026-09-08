@@ -11,3 +11,18 @@ import SwiftUI
 public enum StrandDesign {
     public static let version = "0.1.0"
 }
+
+/// Visual extras that were designed for a Mac GPU.
+///
+/// On iPhone these keep compositing even when the user is doing nothing: a
+/// forever-breathe blur on the recovery ring, plus-lighter sparkline halos,
+/// hover tooltips, and a PointMark per trend sample.
+public enum StrandPerf {
+    public static var reducedEffects: Bool {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }
+}

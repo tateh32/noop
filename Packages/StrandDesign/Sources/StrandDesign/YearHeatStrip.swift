@@ -8,8 +8,8 @@ import SwiftUI
 // built-in help.
 
 /// A day's recovery datum for the heat strip.
-public struct RecoveryDay: Identifiable, Sendable {
-    public let id = UUID()
+public struct RecoveryDay: Identifiable, Sendable, Equatable {
+    public var id: TimeInterval { date.timeIntervalSince1970 }
     public var date: Date
     /// Recovery 0...100, or nil if no data for that day.
     public var score: Double?
@@ -37,7 +37,7 @@ public struct YearHeatStrip: View {
         cellSize: CGFloat = 12,
         spacing: CGFloat = 3,
         showsMonthLabels: Bool = true,
-        showsHover: Bool = true,
+        showsHover: Bool = !StrandPerf.reducedEffects,
         valueFormat: @escaping (Double) -> String = { "Recovery \(Int($0.rounded()))" }
     ) {
         self.days = days.sorted { $0.date < $1.date }
@@ -63,7 +63,7 @@ public struct YearHeatStrip: View {
 
     // Group days into week columns. weekday 0 = Monday ... 6 = Sunday.
     private struct Week: Identifiable {
-        let id = UUID()
+        let id: Int
         var cells: [RecoveryDay?] // length 7, indexed by weekday row
         var monthLabel: String?
     }
@@ -71,7 +71,8 @@ public struct YearHeatStrip: View {
     private func buildWeeks() -> [Week] {
         guard let first = days.first?.date else { return [] }
         var weeks: [Week] = []
-        var current = Week(cells: Array(repeating: nil, count: 7), monthLabel: nil)
+        var weekIndex = 0
+        var current = Week(id: 0, cells: Array(repeating: nil, count: 7), monthLabel: nil)
         var lastMonth = -1
         // Pad the first week so the first day lands on its weekday row.
         let firstRow = weekdayRow(first)
@@ -82,7 +83,8 @@ public struct YearHeatStrip: View {
             let row = weekdayRow(day.date)
             if row == 0 && filledThisWeek > 0 {
                 weeks.append(current)
-                current = Week(cells: Array(repeating: nil, count: 7), monthLabel: nil)
+                weekIndex += 1
+                current = Week(id: weekIndex, cells: Array(repeating: nil, count: 7), monthLabel: nil)
                 filledThisWeek = 0
             }
             current.cells[row] = day
@@ -154,7 +156,7 @@ public struct YearHeatStrip: View {
         .frame(width: gridWidth, height: gridHeight, alignment: .topLeading)
         .overlay(hoverOverlay(weeks: weeks, gridSize: CGSize(width: gridWidth, height: gridHeight)))
         .contentShape(Rectangle())
-        .onContinuousHover(coordinateSpace: .local) { phase in
+        .noopContinuousHover { phase in
             guard showsHover else { return }
             switch phase {
             case .active(let location):

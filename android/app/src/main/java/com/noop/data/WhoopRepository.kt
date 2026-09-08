@@ -127,6 +127,21 @@ class WhoopRepository(private val dao: WhoopDao) {
     suspend fun upsertWorkouts(rows: List<WorkoutRow>) = dao.upsertWorkouts(rows)
     suspend fun upsertAppleDaily(rows: List<AppleDaily>) = dao.upsertAppleDaily(rows)
 
+    /**
+     * Wipe imported and on-device computed scores so a WHOOP / Apple Health / Health Connect
+     * export can be reimported cleanly. Raw BLE streams (`hrSample`, R-R, …) are left in
+     * place — those are the strap's own samples and will refill the computed `-noop`
+     * caches on the next IntelligenceEngine pass.
+     */
+    suspend fun clearImportedHistory() {
+        dao.deleteAllDailyMetrics()
+        dao.deleteAllSleepSessions()
+        dao.deleteAllMetricSeries()
+        dao.deleteAllJournal()
+        dao.deleteAllWorkouts()
+        dao.deleteAllAppleDaily()
+    }
+
     // MARK: - Reads
 
     suspend fun hrSamples(deviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT) =

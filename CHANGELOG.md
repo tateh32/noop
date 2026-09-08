@@ -17,6 +17,63 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.3.3 — iPhone review pass before the next sideload
+
+A full pass over the iPhone target after 1.3.2. Three things would have bitten on device:
+
+- **Scoring skip is per night, not all-or-nothing.** `repo.today` is the latest *scored* day (often yesterday after a WHOOP import). Skipping the whole engine meant new strap nights never got scored. Uncovered nights still score; nights that already have recovery do not.
+- **iOS 16 hover compile.** `.onContinuousHover(coordinateSpace: .local)` resolves to the iOS 17 API under a current Xcode. Charts now use a 16-safe helper.
+- **Zip copy is off the main thread.** Picking a WHOOP / Apple Health export no longer copies hundreds of MB on the UI actor.
+
+Also: Live controls stack vertically, Notifications is hidden from More (Mac stub), onboarding padding and Support donate/contact wrap on a phone, scoring waits until onboarding finishes, bundle version is 1.3.3.
+
+Rebuild scheme **NOOPiOS** from this branch after `xcodegen generate`.
+
+## 1.3.2 — iPhone: Today is actually scrollable
+
+1.3.1 stopped the crashes. The remaining hitch was the Mac visual budget still
+running on the home screen: a forever-breathe **blur bloom** on the recovery ring,
+plus-lighter halos on every sparkline, a decade of days loaded into RAM, and the
+on-device scorer kicking in even after a WHOOP import.
+
+- Recovery ring / strain gauge / sparklines drop blur, forever-breathe, and hover on iPhone.
+- Trend charts skip per-point marks. Heat-strip is six months.
+- Dashboard cache is 400 days, not 4000. Sleep list is 90 nights.
+- Whoop sparklines come from RAM, not six extra SQLite round-trips.
+- Scoring is skipped when a WHOOP import already filled recovery.
+
+Rebuild scheme **NOOPiOS** from this branch.
+
+## 1.3.1 — iPhone: stop the freezes and crashes
+
+The first iPhone sideload compiled the Mac screens as-is. That is why it felt
+frozen and then died: SQLite mmapped 256 MB **per open handle** (two handles),
+every tab stayed alive (Today + Sleep + Trends + Live), import/scoring ran on
+the main thread, and charts rebuilt years of points with a new UUID each time.
+
+- **SQLite on iPhone** uses a 4 MB page cache, no mmap, file temp store.
+- **Only the selected tab is mounted.** Leaving Live actually stops the realtime HR stream.
+- **Import and sleep-staging run off the main thread.** Intelligence scores 3 nights, not 21.
+- **Today / Trends query a short window** and downsample chart marks. Heat-strip is one year.
+- iOS 16 no longer crashes on `.snappy` / `.numericText()` (those are availability-gated).
+
+Sideload the **NOOPiOS** scheme again from this branch after `xcodegen generate`.
+
+## 1.3 — iPhone app, and a WHOOP import that actually fills Today
+
+If you sideloaded before and Today stayed empty after a WHOOP export, that was
+the product — there was no iPhone target, and a successful import still pointed
+Today at the in-progress cycle (blank recovery / HRV / strain).
+
+- **iPhone app (`NOOPiOS`).** Same screens and store as the Mac app. In Xcode:
+  `xcodegen generate` → scheme **NOOPiOS** → set your signing team → Run on your iPhone.
+- **Import that shows up.** The WHOOP `.zip` is copied out of Files/iCloud before parse
+  (in-place reads often fail on iOS). Empty trailing cycles are skipped. Today shows the
+  latest *scored* day, not the open one at the end of the export.
+- **Start over** on Data Sources: clears imported/computed scores so you can reimport
+  cleanly. Live strap samples stay.
+- **German WHOOP filenames** (`physiologische_zyklen.csv`, `Schlaf.csv`, …) are recognised.
+
 ## 1.2 — Readiness, and the start of WHOOP 5/MG
 
 - **New: Readiness.** A "should you push today?" card on Today that synthesizes established

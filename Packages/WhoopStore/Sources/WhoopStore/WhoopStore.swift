@@ -9,6 +9,37 @@ public enum WhoopStoreInfo {
     public static let schemaVersion = 9
 }
 
+/// SQLite page-cache / mmap budget. The Mac values speed multi-thousand-row
+/// imports; the same mmap (256 MB) **per open handle** is enough to jetsam an
+/// iPhone, and the app opens two handles (BLE collector + Repository).
+public enum SQLiteTuning: Sendable {
+    /// `PRAGMA cache_size` in kibibytes (negative form).
+    public static var pageCacheKib: Int {
+        #if os(iOS)
+        4_000
+        #else
+        16_000
+        #endif
+    }
+
+    /// `PRAGMA mmap_size` in bytes. `0` disables mmap on iOS.
+    public static var mmapBytes: Int {
+        #if os(iOS)
+        0
+        #else
+        268_435_456
+        #endif
+    }
+
+    public static var tempStoreSQL: String {
+        #if os(iOS)
+        "FILE"
+        #else
+        "MEMORY"
+        #endif
+    }
+}
+
 /// WhoopStore is an `actor`: its public API is `async`, and all GRDB work runs on the
 /// actor's serial executor rather than the caller's (the main actor). DatabaseQueue calls
 /// are synchronous-blocking; the actor moves them off the main thread (it does not make them
@@ -29,12 +60,13 @@ public actor WhoopStore {
         config.prepareDatabase { db in
             try db.execute(sql: "PRAGMA journal_mode = WAL")
             // Bulk-write/read tuning. NORMAL is the durable, recommended pairing with WAL (only an
-            // OS crash/power loss can lose the last transaction — acceptable here). Bigger page cache
-            // + mmap + in-memory temp tables speed the multi-thousand-row import/backfill writes.
+            // OS crash/power loss can lose the last transaction — acceptable here). Page cache /
+            // mmap / temp store are platform-capped: see SQLiteTuning. Two DatabaseQueue handles
+            // each used to mmap 256 MB, which iOS jetsam treats as real memory.
             try db.execute(sql: "PRAGMA synchronous = NORMAL")
-            try db.execute(sql: "PRAGMA cache_size = -16000")     // ~16 MB page cache
-            try db.execute(sql: "PRAGMA mmap_size = 268435456")   // 256 MB memory-mapped I/O
-            try db.execute(sql: "PRAGMA temp_store = MEMORY")
+            try db.execute(sql: "PRAGMA cache_size = -\(SQLiteTuning.pageCacheKib)")
+            try db.execute(sql: "PRAGMA mmap_size = \(SQLiteTuning.mmapBytes)")
+            try db.execute(sql: "PRAGMA temp_store = \(SQLiteTuning.tempStoreSQL)")
         }
         config.busyMode = .timeout(5)
         try self.init(dbQueue: try DatabaseQueue(path: path, configuration: config))
@@ -62,6 +94,21 @@ public actor WhoopStore {
     }
 
     // MARK: - Maintenance
+
+    /// Wipe imported and on-device computed scores so a WHOOP / Apple Health export can be
+    /// reimported cleanly. Raw BLE streams (`hrSample`, R-R, type-47 biometrics, events,
+    /// battery, raw outbox) stay put — those are the strap's own samples and will refill
+    /// the computed `*-noop` caches on the next IntelligenceEngine pass.
+    public func clearImportedHistory() async throws {
+        try syncWrite { db in
+            try db.execute(sql: "DELETE FROM dailyMetric")
+            try db.execute(sql: "DELETE FROM sleepSession")
+            try db.execute(sql: "DELETE FROM metricSeries")
+            try db.execute(sql: "DELETE FROM journal")
+            try db.execute(sql: "DELETE FROM workout")
+            try db.execute(sql: "DELETE FROM appleDaily")
+        }
+    }
 
     /// Fully checkpoint the WAL into the main database file and truncate the -wal file.
     /// Used before a file-level backup so the single `whoop.sqlite` carries all committed data
@@ -103,6 +150,13 @@ public actor WhoopStore {
     public func indexNamesForTest(table: String) async throws -> Set<String> {
         try syncRead { db in
             try Set(db.indexes(on: table).map(\.name))
+        }
+    }
+
+    /// Current `PRAGMA mmap_size` (bytes). Used by tests to lock the iOS jetsam cap.
+    public func mmapSize() async throws -> Int64 {
+        try syncRead { db in
+            try Int64.fetchOne(db, sql: "PRAGMA mmap_size") ?? 0
         }
     }
 }

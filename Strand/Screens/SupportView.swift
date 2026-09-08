@@ -1,6 +1,8 @@
 import SwiftUI
-import AppKit
 import StrandDesign
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Support — attribution + optional crypto donations. Never a paywall; the whole app works without it.
 struct SupportView: View {
@@ -19,6 +21,24 @@ struct SupportView: View {
 
     private var contactCard: some View {
         StrandCard(padding: 20) {
+            #if os(iOS)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "envelope.fill").foregroundStyle(StrandPalette.accent).accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Get in touch").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
+                        Text("Questions, feedback, bugs — \(ProjectInfo.contactEmail)")
+                            .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Button {
+                    if let url = URL(string: "mailto:\(ProjectInfo.contactEmail)") { PlatformOpen.url(url) }
+                } label: { Label("Email", systemImage: "paperplane.fill") }
+                .buttonStyle(.bordered).tint(StrandPalette.accent)
+                .help("Email \(ProjectInfo.contactEmail)")
+            }
+            #else
             HStack(spacing: 12) {
                 Image(systemName: "envelope.fill").foregroundStyle(StrandPalette.accent).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
@@ -28,11 +48,12 @@ struct SupportView: View {
                 }
                 Spacer(minLength: 8)
                 Button {
-                    if let url = URL(string: "mailto:\(ProjectInfo.contactEmail)") { NSWorkspace.shared.open(url) }
+                    if let url = URL(string: "mailto:\(ProjectInfo.contactEmail)") { PlatformOpen.url(url) }
                 } label: { Label("Email", systemImage: "paperplane.fill") }
                 .buttonStyle(.bordered).tint(StrandPalette.accent)
                 .help("Email \(ProjectInfo.contactEmail)")
             }
+            #endif
         }
     }
 
@@ -97,27 +118,18 @@ struct SupportView: View {
                 }
 
                 if let coin = ProjectInfo.donations.first(where: { $0.symbol == selected }) {
+                    #if os(iOS)
+                    VStack(alignment: .leading, spacing: 16) {
+                        qrView(coin.address)
+                        donateAddress(coin)
+                    }
+                    #else
                     HStack(alignment: .top, spacing: 16) {
                         qrView(coin.address)
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Scan with any \(coin.name) wallet")
-                                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
-                            Text(coin.address)
-                                .font(StrandFont.mono(11)).foregroundStyle(StrandPalette.textSecondary)
-                                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                            Button {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(coin.address, forType: .string)
-                                withAnimation { copied = coin.symbol }
-                            } label: {
-                                Label(copied == coin.symbol ? "Copied!" : "Copy address",
-                                      systemImage: copied == coin.symbol ? "checkmark" : "doc.on.doc")
-                            }
-                            .buttonStyle(.bordered).tint(StrandPalette.accent)
-                            .accessibilityLabel("Copy \(coin.name) address")
-                        }
+                        donateAddress(coin)
                         Spacer(minLength: 0)
                     }
+                    #endif
                 }
 
                 Text("Any amount helps. Thank you — genuinely.")
@@ -126,11 +138,34 @@ struct SupportView: View {
         }
     }
 
+    private func donateAddress(_ coin: ProjectInfo.CryptoAddress) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Scan with any \(coin.name) wallet")
+                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
+            Text(coin.address)
+                .font(StrandFont.mono(11)).foregroundStyle(StrandPalette.textSecondary)
+                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            Button {
+                PlatformOpen.copy(coin.address)
+                withAnimation { copied = coin.symbol }
+            } label: {
+                Label(copied == coin.symbol ? "Copied!" : "Copy address",
+                      systemImage: copied == coin.symbol ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.bordered).tint(StrandPalette.accent)
+            .accessibilityLabel("Copy \(coin.name) address")
+        }
+    }
+
     /// Black-on-white QR so wallet cameras read it cleanly against the dark UI.
     private func qrView(_ address: String) -> some View {
         Group {
-            if let img = QRCode.image(for: address) {
-                Image(nsImage: img).resizable().interpolation(.none)
+            if let cg = QRCode.cgImage(for: address) {
+                #if os(iOS)
+                Image(uiImage: UIImage(cgImage: cg)).resizable().interpolation(.none)
+                #else
+                Image(decorative: cg, scale: 1).resizable().interpolation(.none)
+                #endif
             } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(StrandPalette.surfaceInset)
             }
@@ -189,7 +224,9 @@ struct SupportModalOverlay: View {
                 }
                 .shadow(color: Color.black.opacity(0.5), radius: 30, x: 0, y: 14)
         }
+        #if os(macOS)
         .onExitCommand { isPresented = false }
+        #endif
         .transition(.opacity)
     }
 }

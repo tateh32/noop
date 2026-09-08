@@ -52,7 +52,7 @@ public struct OnboardingWizard: View {
             VStack(spacing: 0) {
                 // Top chrome: a small back affordance + a step counter.
                 topBar
-                    .padding(.horizontal, 36)
+                    .padding(.horizontal, pageInset)
                     .padding(.top, 28)
 
                 // The paged content.
@@ -73,11 +73,11 @@ public struct OnboardingWizard: View {
                 .frame(maxWidth: 620, maxHeight: .infinity)
                 .transition(stepTransition)
                 .id(step)                       // re-runs the transition per step
-                .padding(.horizontal, 40)
+                .padding(.horizontal, pageInset)
 
                 // Bottom: the thread (progress) + the forward CTA.
                 bottomBar
-                    .padding(.horizontal, 40)
+                    .padding(.horizontal, pageInset)
                     .padding(.bottom, 36)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -89,6 +89,15 @@ public struct OnboardingWizard: View {
         // Isolated live observation — a hidden watcher slides Scan → celebration on bond
         // without subscribing the whole wizard to per-tick updates.
         .background(BondWatcher(onBonded: handleBond))
+    }
+
+    /// 40pt side padding is Mac chrome; on a 390pt phone it steals too much of the step.
+    private var pageInset: CGFloat {
+        #if os(iOS)
+        20
+        #else
+        40
+        #endif
     }
 
     private func handleBond() {
@@ -107,9 +116,9 @@ public struct OnboardingWizard: View {
                 startRadius: 40,
                 endRadius: glow ? 620 : 480
             )
-            .blendMode(.plusLighter)
+            .blendMode(StrandPerf.reducedEffects ? .normal : .plusLighter)
             .opacity(glow ? 0.9 : 0.6)
-            .animation(StrandMotion.breathe, value: glow)
+            .animation(StrandPerf.reducedEffects ? nil : StrandMotion.breathe, value: glow)
             .ignoresSafeArea()
 
             // A faint indigo wash from the top — instrument-grade depth.
@@ -267,7 +276,7 @@ private struct WelcomeStep: View {
                     .font(StrandFont.title2)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .opacity(appear ? 1 : 0)
-                Text("A private window into your recovery, sleep and strain — read straight from your strap, kept only on this Mac.")
+                Text("A private window into your recovery, sleep and strain — read straight from your strap, kept only on \(DeviceCopy.here).")
                     .font(StrandFont.body)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .multilineTextAlignment(.center)
@@ -303,7 +312,7 @@ private struct WhatItDoesStep: View {
         .init(icon: "lock.shield",
               tint: StrandPalette.statusPositive,
               title: "Own your data, offline",
-              body: "Everything lives on this Mac. No account, no sync, no cloud. Your thread is yours alone."),
+              body: "Everything lives on \(DeviceCopy.here). No account, no sync, no cloud. Your thread is yours alone."),
     ]
 
     var body: some View {
@@ -452,7 +461,7 @@ private struct WearStep: View {
                 VStack(spacing: 12) {
                     Checkline(text: "Wear it snug on your wrist or bicep — sensor against skin.")
                     Checkline(text: "Give it a few minutes of charge if the battery is low.")
-                    Checkline(text: "Keep it within about a metre of this Mac.")
+                    Checkline(text: "Keep it within about a metre of \(DeviceCopy.here).")
                 }
                 .frame(maxWidth: 440)
             }
@@ -552,7 +561,7 @@ private struct ScanStep: View {
                         .foregroundStyle(StrandPalette.textPrimary)
                 }
 
-                Text("WHOOP straps don't appear in macOS System Settings → Bluetooth. They advertise on a custom profile that only apps like NOOP can find — so there's nothing to pair there, and you shouldn't try.")
+                Text("WHOOP straps don't appear in Settings → Bluetooth. They advertise on a custom profile that only apps like NOOP can find — so there's nothing to pair there, and you shouldn't try.")
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -562,7 +571,7 @@ private struct ScanStep: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Checkline(text: "It's charged and worn — the sensor needs skin contact to wake.")
                     Checkline(text: "It isn't held by the WHOOP phone app. Only one host at a time — close the app or turn off its Bluetooth.")
-                    Checkline(text: "It's within about a metre of this Mac.")
+                    Checkline(text: "It's within about a metre of \(DeviceCopy.here).")
                 }
 
                 Button(action: retry) {
@@ -719,9 +728,15 @@ private struct ImportStep: View {
                 HStack(spacing: 8) {
                     Image(systemName: "sidebar.left")
                         .foregroundStyle(StrandPalette.textTertiary)
-                    Text("Find it in the sidebar under Data Sources.")
-                        .font(StrandFont.subhead)
-                        .foregroundStyle(StrandPalette.textSecondary)
+                    Group {
+                        #if os(iOS)
+                        Text("Find it under More → Data Sources.")
+                        #else
+                        Text("Find it in the sidebar under Data Sources.")
+                        #endif
+                    }
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textSecondary)
                 }
             }
         }
@@ -1042,7 +1057,7 @@ private struct PrimaryButton: View {
 
 private struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        Group { configuration.label }
             .frame(maxWidth: .infinity)
             .foregroundStyle(Color.white)
             .padding(.vertical, 14)
@@ -1059,7 +1074,7 @@ private struct PrimaryButtonStyle: ButtonStyle {
 
 private struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        Group { configuration.label }
             .font(StrandFont.subhead.weight(.semibold))
             .foregroundStyle(StrandPalette.textPrimary)
             .padding(.vertical, 11)
@@ -1079,7 +1094,7 @@ private struct SecondaryButtonStyle: ButtonStyle {
 
 private struct GhostButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        Group { configuration.label }
             .font(StrandFont.subhead)
             .foregroundStyle(configuration.isPressed ? StrandPalette.textSecondary : StrandPalette.textTertiary)
             .padding(.vertical, 12)

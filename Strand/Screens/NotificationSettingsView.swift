@@ -1,6 +1,7 @@
 import SwiftUI
-import AppKit
 import StrandDesign
+#if os(macOS)
+import AppKit
 
 /// Notifications — choose which Mac apps tap your wrist, and how.
 /// Real app icons via NSWorkspace; per-app on/off + buzz pattern; quiet hours.
@@ -351,5 +352,19 @@ private struct FormToggleRow: View {
         .frame(width: 760, height: 940)
         .background(StrandPalette.surfaceBase)
         .preferredColorScheme(.dark)
+}
+#endif
+#else
+/// Wrist-app notification mirroring is a Mac feature (it enumerates installed Mac apps).
+struct NotificationSettingsView: View {
+    var body: some View {
+        ScreenScaffold(title: "Notifications",
+                       subtitle: "On iPhone, use Data Sources to import your history. Wrist alerts for other apps are a Mac feature.") {
+            DataPendingNote(
+                title: "Mac-only for now",
+                message: "The per-app wrist buzz list needs macOS Launch Services. Pair the strap from Live and import your WHOOP export from Data Sources — those work on this iPhone."
+            )
+        }
+    }
 }
 #endif

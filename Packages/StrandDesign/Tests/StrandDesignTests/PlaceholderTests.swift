@@ -169,4 +169,41 @@ final class StrandDesignTests: XCTestCase {
         XCTAssertEqual(Sparkline.defaultValueString(64), "64")
         XCTAssertEqual(Sparkline.defaultValueString(64.5), "64.5")
     }
+
+    func testReducedEffectsMatchesPlatform() {
+        #if os(iOS)
+        XCTAssertTrue(StrandPerf.reducedEffects)
+        #else
+        XCTAssertFalse(StrandPerf.reducedEffects)
+        #endif
+    }
+
+    func testTrendPointIdentityIsTheDateNotARandomUUID() {
+        let d = Date(timeIntervalSince1970: 1_700_000_000)
+        let a = TrendPoint(date: d, value: 10)
+        let b = TrendPoint(date: d, value: 99)
+        XCTAssertEqual(a.id, b.id)
+        XCTAssertEqual(a.id, d.timeIntervalSince1970)
+        XCTAssertNotEqual(a, b)
+    }
+
+    func testRecoveryDayIdentityIsTheDate() {
+        let d = Date(timeIntervalSince1970: 1_700_000_000)
+        XCTAssertEqual(RecoveryDay(date: d, score: 12).id, RecoveryDay(date: d, score: 80).id)
+    }
+
+    func testDownsampleKeepsShortSeries() {
+        let pts = (0..<10).map { TrendPoint(date: Date(timeIntervalSince1970: TimeInterval($0)), value: Double($0)) }
+        XCTAssertEqual(ChartSeries.downsample(pts, maxCount: 160).count, 10)
+        XCTAssertEqual(ChartSeries.downsample([], maxCount: 160).count, 0)
+    }
+
+    func testDownsampleCapsLengthAndKeepsEndpoints() {
+        let pts = (0..<1_000).map { TrendPoint(date: Date(timeIntervalSince1970: TimeInterval($0)), value: Double($0)) }
+        let out = ChartSeries.downsample(pts, maxCount: 160)
+        XCTAssertLessThanOrEqual(out.count, 160)
+        XCTAssertEqual(out.first?.value, 0)
+        XCTAssertEqual(out.last?.value, 999)
+        XCTAssertGreaterThan(out.count, 2)
+    }
 }

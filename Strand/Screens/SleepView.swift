@@ -22,7 +22,6 @@ import WhoopStore
 
 struct SleepView: View {
     @EnvironmentObject var repo: Repository
-    @EnvironmentObject var live: LiveState
 
     // The standard tile grid: ONE adaptive column set, used for every tile group.
     private let tileColumns = [GridItem(.adaptive(minimum: 168), spacing: NoopMetrics.gap)]
@@ -408,10 +407,12 @@ struct SleepView: View {
 
     private typealias Metric = (latest: Double?, typical: Double?, series: [Double])
 
-    /// Build a metric from a per-day transform, keeping only finite positive-ish values.
+    /// Build a metric from a per-day transform, keeping only finite values.
+    /// Typical/latest use the full history; the sparkline is the trailing 30 points
+    /// so a years-long import does not feed a 4000-sample path into SwiftUI.
     private func metric(_ transform: (DailyMetric) -> Double?) -> Metric {
-        let series = repo.days.compactMap(transform).filter { $0.isFinite }
-        return (series.last, mean(series), series)
+        let all = repo.days.compactMap(transform).filter { $0.isFinite }
+        return (all.last, mean(all), Array(all.suffix(30)))
     }
 
     /// Sleep performance % = asleep / sleep-need, where need = 7.75h baseline + debt-style
@@ -743,7 +744,6 @@ private struct Night {
 #Preview("Sleep") {
     SleepView()
         .environmentObject(Repository.previewSleep())
-        .environmentObject(LiveState())
         .frame(width: 980, height: 1180)
         .preferredColorScheme(.dark)
 }

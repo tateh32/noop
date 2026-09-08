@@ -1,5 +1,6 @@
 import XCTest
 import GRDB
+import WhoopProtocol
 @testable import WhoopStore
 
 final class MetricsCacheTests: XCTestCase {
@@ -160,5 +161,51 @@ final class MetricsCacheTests: XCTestCase {
         // Raw rows are stored under the distinct prefix.
         let raw = try await store.cursor("read:hr")
         XCTAssertEqual(raw, 1_716_400_000)
+    }
+
+    // MARK: - Start-over (clear imported caches, keep streams)
+
+    func testClearImportedHistoryWipesCachesAndKeepsHR() async throws {
+        let store = try await WhoopStore.inMemory()
+        try await store.upsertDailyMetrics([
+            DailyMetric(day: "2024-03-01", totalSleepMin: 420, efficiency: 90,
+                        deepMin: 90, remMin: 100, lightMin: 200, disturbances: nil,
+                        restingHr: 52, avgHrv: 80, recovery: 70, strain: 10,
+                        exerciseCount: 1)
+        ], deviceId: "my-whoop")
+        try await store.upsertSleepSessions([
+            CachedSleepSession(startTs: 1000, endTs: 5000, efficiency: 0.9,
+                               restingHr: 52, avgHrv: 80, stagesJSON: nil)
+        ], deviceId: "my-whoop")
+        try await store.insert(Streams(hr: [HRSample(ts: 1_700_000_000, bpm: 60)]), deviceId: "my-whoop")
+
+        try await store.clearImportedHistory()
+
+        let days = try await store.dailyMetrics(deviceId: "my-whoop", from: "0000-01-01", to: "9999-12-31")
+        let sleeps = try await store.sleepSessions(deviceId: "my-whoop", from: 0, to: 10_000_000, limit: 10)
+        let hr = try await store.hrSamples(deviceId: "my-whoop", from: 0, to: 2_000_000_000, limit: 10)
+        XCTAssertTrue(days.isEmpty)
+        XCTAssertTrue(sleeps.isEmpty)
+        XCTAssertEqual(hr.count, 1)
+        XCTAssertEqual(hr[0].bpm, 60)
+    }
+
+    func testFileStoreMmapMatchesPlatformBudget() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("noop-mmap-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("whoop.sqlite").path
+        let store = try await WhoopStore(path: path)
+        _ = try await store.tableNames()
+        let mmap = try await store.mmapSize()
+        XCTAssertEqual(mmap, Int64(SQLiteTuning.mmapBytes))
+        #if os(iOS)
+        XCTAssertEqual(SQLiteTuning.mmapBytes, 0, "iPhone must not mmap 256 MB (jetsam)")
+        XCTAssertEqual(SQLiteTuning.pageCacheKib, 4_000)
+        #else
+        XCTAssertEqual(SQLiteTuning.mmapBytes, 268_435_456)
+        XCTAssertEqual(SQLiteTuning.pageCacheKib, 16_000)
+        #endif
     }
 }

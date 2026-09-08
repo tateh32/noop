@@ -23,11 +23,13 @@ struct SettingsView: View {
 
     var body: some View {
         ScreenScaffold(title: "Settings",
-                       subtitle: "Your numbers, your strap, and how NOOP works. All on this Mac.") {
+                       subtitle: "Your numbers, your strap, and how NOOP works. All on \(DeviceCopy.here).") {
             profileCard
             strapCard
             experimentalCard
+            #if os(macOS)
             backupCard
+            #endif
             aboutCard
         }
         .alert(backupAlertTitle, isPresented: $showBackupAlert) {
@@ -69,7 +71,9 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
+                    #if os(macOS)
                     .fixedSize()
+                    #endif
                     .accessibilityLabel("Sex")
                 }
                 rowDivider
@@ -240,6 +244,7 @@ struct SettingsView: View {
         }
     }
 
+#if os(macOS)
     private var backupCard: some View {
         SettingsSection(
             icon: "externaldrive.fill",
@@ -322,6 +327,7 @@ struct SettingsView: View {
             showBackupAlert = true
         }
     }
+#endif
 
     // MARK: - About
 
@@ -451,6 +457,16 @@ private struct FormRow<Control: View>: View {
     @ViewBuilder var control: () -> Control
 
     var body: some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(StrandFont.body)
+                .foregroundStyle(StrandPalette.textPrimary)
+            control()
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(.vertical, 4)
+        #else
         HStack(alignment: .center, spacing: 16) {
             Text(label)
                 .font(StrandFont.body)
@@ -459,6 +475,7 @@ private struct FormRow<Control: View>: View {
             control()
         }
         .frame(minHeight: 32)
+        #endif
     }
 }
 

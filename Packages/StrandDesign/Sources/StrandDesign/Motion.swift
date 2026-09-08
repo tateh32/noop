@@ -50,6 +50,29 @@ public enum StrandMotion {
     public static let fade = Animation.easeInOut(duration: durationStandard)
 }
 
+public extension View {
+    /// Numeric text transition + snappy animation on OS versions that have them.
+    /// A no-op on iOS 16 / macOS 13 so a sideload targeting those does not crash.
+    @ViewBuilder
+    func noopNumericText<V: Equatable>(value: V) -> some View {
+        if #available(iOS 17.0, macOS 14.0, *) {
+            self.contentTransition(.numericText()).animation(.snappy, value: value)
+        } else {
+            self
+        }
+    }
+
+    /// Continuous hover that compiles against iOS 16.
+    ///
+    /// Writing `.onContinuousHover(coordinateSpace: .local)` with a current SDK
+    /// resolves to the iOS 17 `CoordinateSpaceProtocol` overload and fails to
+    /// build a 16.0 deployment. The no-argument form is the iOS 16 API and still
+    /// uses local coordinates.
+    func noopContinuousHover(perform action: @escaping (HoverPhase) -> Void) -> some View {
+        self.onContinuousHover(perform: action)
+    }
+}
+
 #if DEBUG
 private struct MotionDemo: View {
     @State private var on = false

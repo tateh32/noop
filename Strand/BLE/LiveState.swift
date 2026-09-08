@@ -48,6 +48,7 @@ public final class LiveState: ObservableObject {
 
     public func append(log line: String) {
         log.append(line)
-        if log.count > 200 { log.removeFirst(log.count - 200) }
+        let cap = PhoneBudget.liveLogCap
+        if log.count > cap { log.removeFirst(log.count - cap) }
     }
 }

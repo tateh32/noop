@@ -15,6 +15,10 @@ public final class FrameRouter {
     /// standard 0x2A37/0x2A19 profiles instead).
     var family: DeviceFamily = .whoop4
 
+    /// Last time we published `lastFrameType` — historical offload can be hundreds of
+    /// frames/sec and each `@Published` tick re-renders every LiveState observer.
+    private var lastFramePublish = Date.distantPast
+
     public init(state: LiveState) {
         self.state = state
     }
@@ -26,7 +30,11 @@ public final class FrameRouter {
         // Reject frames that failed their checksum — never let bad bytes drive state.
         if parsed.crcOK == false { return }
 
-        state.lastFrameType = parsed.typeName
+        let now = Date()
+        if now.timeIntervalSince(lastFramePublish) >= 0.25 {
+            state.lastFrameType = parsed.typeName
+            lastFramePublish = now
+        }
 
         switch parsed.typeName {
         case "REALTIME_DATA":

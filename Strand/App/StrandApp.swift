@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if os(macOS)
 @main
 struct StrandApp: App {
     @StateObject private var model = AppModel()
@@ -34,3 +35,4 @@ struct StrandApp: App {
         .menuBarExtraStyle(.window)
     }
 }
+#endif

@@ -42,7 +42,7 @@ struct TrendsView: View {
         }
     }
 
-    @State private var range: Range = .quarter
+    @State private var range: Range = PhoneBudget.isPhone ? .month : .quarter
 
     // yyyy-MM-dd → Date (en_US_POSIX, UTC), per task spec.
     private static let dayParser: DateFormatter = {
@@ -109,12 +109,16 @@ struct TrendsView: View {
         for r in range.widening {
             let pts = points(days(for: r), value)
             if !pts.isEmpty {
-                return ResolvedMetric(points: pts, effective: r,
-                                      widened: r != range, caption: caption(count: pts.count, eff: r))
+                return ResolvedMetric(
+                    points: ChartSeries.downsample(pts, maxCount: PhoneBudget.chartMaxPoints),
+                    effective: r,
+                    widened: r != range,
+                    caption: caption(count: pts.count, eff: r))
             }
         }
         // No range held data: fall back to ALL (matches effectiveRange()).
-        let pts = points(days(for: .all), value)
+        let pts = ChartSeries.downsample(points(days(for: .all), value),
+                                         maxCount: PhoneBudget.chartMaxPoints)
         return ResolvedMetric(points: pts, effective: .all,
                               widened: .all != range, caption: caption(count: pts.count, eff: .all))
     }
@@ -314,14 +318,22 @@ struct TrendsView: View {
     // MARK: Year heat-strip
 
     private var yearStrip: some View {
-        // Always show at least a full year for context; expand to all history on ALL.
-        let stripDays = max(range.days ?? repo.days.count, 365)
+        // Always show at least a full year for context; expand to all history on ALL,
+        // but never more than PhoneBudget.heatStripMaxDays cells (each is a SwiftUI view).
+        let stripDays = min(max(range.days ?? repo.days.count, 365), PhoneBudget.heatStripMaxDays)
         let recent = repo.days.suffix(stripDays)
         let recoveryDays: [RecoveryDay] = recent.compactMap { d in
             guard let dt = date(d.day) else { return nil }
             return RecoveryDay(date: dt, score: d.recovery)
         }
-        let title = (range == .all && repo.days.count > 365) ? "Recovery — all history" : "Recovery — past year"
+        let title: String
+        if range == .all && repo.days.count > PhoneBudget.heatStripMaxDays {
+            title = "Recovery — past year"
+        } else if range == .all && repo.days.count > 365 {
+            title = "Recovery — all history"
+        } else {
+            title = "Recovery — past year"
+        }
         return NoopCard {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(title, overline: "Calendar", trailing: "\(recoveryDays.filter { $0.score != nil }.count) days")
@@ -329,7 +341,8 @@ struct TrendsView: View {
                     sparsePlaceholder.frame(height: 120)
                 } else {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        YearHeatStrip(days: recoveryDays).padding(.vertical, 2)
+                        YearHeatStrip(days: recoveryDays, showsHover: !PhoneBudget.isPhone)
+                            .padding(.vertical, 2)
                     }
                     Divider().overlay(StrandPalette.hairline)
                     legend

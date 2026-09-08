@@ -16,8 +16,8 @@ works only with **your own data**.
 ## Repository layout
 
 The codebase is split into reusable, cross-platform Swift packages plus a thin platform-specific
-app layer. The **macOS app is the reference implementation**; iOS and Android targets are planned
-and reuse the same packages where they can.
+app layer. The **macOS app is the reference implementation**. The **iPhone app** (`NOOPiOS`)
+reuses the same `Strand/` screens. Android lives under `android/`.
 
 ```
 Strand/
@@ -211,65 +211,52 @@ swift run backfill
 
 ---
 
-## iOS (planned — packages are ready)
+## iPhone (sideload from Xcode)
 
-All five packages already target `.iOS(.v16)`, so the **non-UI core compiles for iOS today**.
-There is currently no iOS app target; adding one is mostly app-layer wiring, not package work.
+The **NOOPiOS** target in `project.yml` is the iPhone app. It compiles the shared `Strand/`
+screens (minus the Mac `@main`, menu bar, and AppKit-only services) plus `StrandiOS/NOOPiOSApp.swift`.
 
-### Adding an iOS app target
+```bash
+cd /path/to/NOOP
+xcodegen generate
+open Strand.xcodeproj
+```
 
-1. **Reuse the packages directly.** In `project.yml`, add an iOS application target that depends on
-   the same packages the macOS target uses:
+Then in Xcode:
 
-   ```yaml
-   targets:
-     StrandiOS:
-       type: application
-       platform: iOS
-       deploymentTarget: "16.0"
-       sources: [StrandiOS]          # iOS-specific app layer
-       dependencies:
-         - package: WhoopProtocol
-         - package: WhoopStore
-         - package: StrandAnalytics
-         - package: StrandImport
-         - package: StrandDesign
-   ```
+1. Select the **NOOPiOS** scheme (the **Strand** scheme is the Mac app).
+2. Signing & Capabilities → Team → your Personal Team (a free Apple ID works).
+   Bundle id: `com.noopapp.noop.ios`.
+3. Connect the iPhone, trust this computer, set it as the run destination, press Run.
+4. On the phone: Settings → General → VPN & Device Management → trust the developer cert.
+5. **More → Data Sources → Choose export…** and pick the WHOOP `.zip` you saved to Files
+   from [app.whoop.com](https://app.whoop.com) → Data Management.
+6. If an old import looks empty, tap **Start over** and import again.
 
-   Then `xcodegen generate` and build with `-scheme StrandiOS -destination 'generic/platform=iOS'`
-   (or a simulator destination). `WhoopProtocol`, `WhoopStore`, `StrandAnalytics`, `StrandImport`,
-   and most of `StrandDesign` need **no changes**.
+Notes:
 
-2. **CoreBluetooth on iOS.** `BLEManager` already uses CoreBluetooth, which is identical API on iOS.
-   The differences are:
-   - Add `NSBluetoothAlwaysUsageDescription` to the iOS Info.plist (the macOS one already exists).
-   - For background offload, request the `bluetooth-central` background mode and consider
-     CoreBluetooth **state restoration** — `BLEManager` already handles
-     `CBCentralManagerRestoredStatePeripheralsKey`, so restoration is wired but the iOS
-     background-modes entitlement must be added.
-   - Replace the macOS app-sandbox + `com.apple.security.device.bluetooth` entitlements with the
-     iOS signing/capabilities equivalents.
+- `DEVELOPMENT_TEAM` is left empty in `project.yml` on purpose — you pick the team in Xcode.
+- BLE does **not** work in the Simulator. Import does. Test pairing on a physical iPhone with
+  the official WHOOP app closed (one host at a time).
+- The iOS `Info.plist` asks for Bluetooth and declares `UIBackgroundModes: bluetooth-central`.
+  `BLEManager` is constructed with `CBCentralManagerOptionRestoreIdentifierKey` on iOS so the
+  system can relaunch the app for strap events.
+- Wrist-app notification mirroring and “lock the Mac” automations stay Mac-only.
 
-3. **App-layer code that needs an iOS variant.** The packages are clean; the macOS *app* directory
-   has a handful of AppKit dependencies that must be ported (or `#if os(macOS)`-gated) when building
-   the iOS app:
+Command-line compile check (no signing, no device):
 
-   | macOS app code | File | iOS replacement |
-   |----------------|------|-----------------|
-   | `NSPasteboard.general` (copy donation address) | `Strand/Screens/SupportView.swift` | `UIPasteboard.general` |
-   | `NSWorkspace.shared.open(url:)` / `.icon(forFile:)` | `Strand/System/MacActions.swift`, `Strand/Data/NotificationSettingsStore.swift` | `UIApplication.shared.open(_:)`; app icons aren't available on iOS |
-   | `NSImage` for app icons | `Strand/Data/NotificationSettingsStore.swift` | `UIImage` (and rethink the macOS-only notification-mirroring feature) |
-   | `MenuBarExtra` + `MenuBarContent` (menu-bar HR) | `Strand/App/StrandApp.swift`, `Strand/MenuBar/` | No menu bar on iOS — use a widget / Live Activity instead |
-   | `MacActions.lockScreen()` (login.framework) and `runShortcut(_:)` | `Strand/System/MacActions.swift` | macOS-only; the strap-double-tap actions have no direct iOS analogue |
-   | `.windowStyle(.hiddenTitleBar)` / `.defaultSize` window chrome | `Strand/App/StrandApp.swift` | Drop window modifiers; use a normal iOS scene |
-
-   Because the design system (`StrandDesign`) already bridges `NSColor`/`UIColor` behind
-   `#if canImport(AppKit) / #elseif canImport(UIKit)`, the palette, fonts, and most components carry
-   over without edits.
+```bash
+xcodebuild \
+  -project Strand.xcodeproj \
+  -scheme NOOPiOS \
+  -destination 'generic/platform=iOS' \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
 
 ---
 
-## Android (planned)
+## Android (optional — not needed for iPhone)
 
 A native Android client is planned as a separate, Kotlin/Gradle module rather than a port of the
 Swift app. When present, it lives under **`android/`** with its own `README`.
@@ -287,9 +274,8 @@ facts in `WhoopProtocol/Resources/whoop_protocol.json` are language-agnostic). B
 instructions live in **`android/README.md`** — open the `android/` directory in Android Studio, let
 Gradle sync, and run on a device with Bluetooth (an emulator cannot reach a physical strap).
 
-> The `android/` directory may not yet exist in your checkout. Until it lands, the macOS app above is
-> the reference implementation and the shared packages define the protocol, storage, analytics, and
-> import behavior any future client must match.
+The `android/` directory is in this repo. Open it in Android Studio if you want that client.
+iPhone users can ignore it.
 
 ---
 

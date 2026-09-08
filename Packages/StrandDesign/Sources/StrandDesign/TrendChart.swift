@@ -9,8 +9,11 @@ import Charts
 // any gradient + value-range can be supplied for HRV/RHR/etc.
 
 /// One point on a trend line.
-public struct TrendPoint: Identifiable, Sendable {
-    public let id = UUID()
+///
+/// Identity is the timestamp, not a fresh UUID — a UUID-per-construct made SwiftUI
+/// treat every chart rebuild as a full data replacement (jank + extra memory).
+public struct TrendPoint: Identifiable, Sendable, Equatable {
+    public var id: TimeInterval { date.timeIntervalSince1970 }
     public var date: Date
     public var value: Double
 
@@ -43,7 +46,7 @@ public struct TrendChart: View {
         valueRange: ClosedRange<Double> = 0...100,
         showsArea: Bool = true,
         height: CGFloat = 220,
-        showsHover: Bool = true,
+        showsHover: Bool = !StrandPerf.reducedEffects,
         valueFormat: @escaping (Double) -> String = { String(Int($0.rounded())) },
         dateFormat: @escaping (Date) -> String = { TrendChart.defaultDateString($0) }
     ) {
@@ -123,13 +126,15 @@ public struct TrendChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                 .foregroundStyle(valueGradient)
             }
-            ForEach(points) { p in
-                PointMark(
-                    x: .value("Date", p.date),
-                    y: .value("Value", p.value)
-                )
-                .symbolSize(18)
-                .foregroundStyle(StrandPalette.sample(stops: gradient.toStops(), at: unit(p.value)))
+            if !StrandPerf.reducedEffects {
+                ForEach(points) { p in
+                    PointMark(
+                        x: .value("Date", p.date),
+                        y: .value("Value", p.value)
+                    )
+                    .symbolSize(18)
+                    .foregroundStyle(StrandPalette.sample(stops: gradient.toStops(), at: unit(p.value)))
+                }
             }
         }
         .chartYScale(domain: valueRange)
@@ -181,7 +186,7 @@ public struct TrendChart: View {
                 }
                 .animation(StrandMotion.fade, value: hoverX)
                 .contentShape(Rectangle())
-                .onContinuousHover(coordinateSpace: .local) { phase in
+                .noopContinuousHover { phase in
                     guard showsHover else { return }
                     switch phase {
                     case .active(let location): hoverX = location.x

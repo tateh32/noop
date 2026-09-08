@@ -103,6 +103,15 @@ final class ImportCoordinatorTests: XCTestCase {
         XCTAssertEqual(result.kind, .appleHealth)
     }
 
+    func testDetectKindWhoopByLocalizedGermanFilenames() throws {
+        let whoopOnly = makeTempDir()
+        try FileManager.default.copyItem(
+            at: Fixtures.url("physiological_cycles.csv"),
+            to: whoopOnly.appendingPathComponent("physiologische_zyklen.csv"))
+        let kind = try ImportCoordinator().detectKind(of: whoopOnly)
+        XCTAssertEqual(kind, .whoopExport)
+    }
+
     func testDetectKindWhoopByZipEntry() throws {
         let zip = try makeZip(named: "whoop.zip", entries: [
             ("nested/deeper/physiological_cycles.csv", "physiological_cycles.csv"),

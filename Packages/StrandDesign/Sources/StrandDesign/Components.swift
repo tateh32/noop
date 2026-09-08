@@ -21,11 +21,21 @@ public enum NoopMetrics {
 public struct NoopCard<Content: View>: View {
     private let padding: CGFloat
     @ViewBuilder private let content: () -> Content
+    #if os(macOS)
     @State private var hover = false
+    #endif
     public init(padding: CGFloat = NoopMetrics.cardPadding, @ViewBuilder content: @escaping () -> Content) {
         self.padding = padding; self.content = content
     }
     public var body: some View {
+        #if os(iOS)
+        content()
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(StrandPalette.surfaceRaised, in: RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous)
+                .strokeBorder(StrandPalette.hairline, lineWidth: 1))
+        #else
         content()
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -35,6 +45,7 @@ public struct NoopCard<Content: View>: View {
             .shadow(color: .black.opacity(hover ? 0.25 : 0), radius: 10, y: 4)
             .onHover { hover = $0 }
             .animation(.easeOut(duration: 0.16), value: hover)
+        #endif
     }
 }
 

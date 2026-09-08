@@ -32,7 +32,7 @@ public struct RecoveryRing: View {
         diameter: CGFloat = 240,
         lineWidth: CGFloat = 16,
         showsLabel: Bool = true,
-        showsHover: Bool = true,
+        showsHover: Bool = !StrandPerf.reducedEffects,
         valueFormat: @escaping (Double) -> String = { "Recovery \(Int($0.rounded()))" }
     ) {
         self.score = score
@@ -83,7 +83,7 @@ public struct RecoveryRing: View {
         }
         .frame(width: diameter, height: diameter)
         .contentShape(Rectangle())
-        .onContinuousHover(coordinateSpace: .local) { phase in
+        .noopContinuousHover { phase in
             guard showsHover else { return }
             switch phase {
             case .active(let location): hoverPoint = location
@@ -91,11 +91,19 @@ public struct RecoveryRing: View {
             }
         }
         .onAppear {
-            withAnimation(StrandMotion.drawIn) { animatedFraction = fraction }
-            bloomPulse = true
+            if StrandPerf.reducedEffects {
+                animatedFraction = fraction
+            } else {
+                withAnimation(StrandMotion.drawIn) { animatedFraction = fraction }
+                bloomPulse = true
+            }
         }
         .onChange(of: score) { _ in
-            withAnimation(StrandMotion.drawIn) { animatedFraction = fraction }
+            if StrandPerf.reducedEffects {
+                animatedFraction = fraction
+            } else {
+                withAnimation(StrandMotion.drawIn) { animatedFraction = fraction }
+            }
         }
     }
 
@@ -103,22 +111,24 @@ public struct RecoveryRing: View {
 
     private var ring: some View {
         ZStack {
-            // Outer bloom: a blurred copy of the filled arc, opacity scaled by score,
-            // gently breathing for life.
-            arcShape(to: animatedFraction)
-                .stroke(
-                    AngularGradient(
-                        gradient: StrandPalette.recoveryGradient,
-                        center: .center,
-                        startAngle: startAngle,
-                        endAngle: endAngle
-                    ),
-                    style: StrokeStyle(lineWidth: lineWidth * 1.05, lineCap: .round)
-                )
-                .blur(radius: bloomRadius)
-                .opacity(bloomOpacity * (bloomPulse ? 1.0 : 0.78))
-                .animation(StrandMotion.breathe, value: bloomPulse)
-                .blendMode(.plusLighter)
+            if !StrandPerf.reducedEffects {
+                // Outer bloom: a blurred copy of the filled arc. Mac-only — the
+                // forever breathe + blur keeps an iPhone compositing on Today.
+                arcShape(to: animatedFraction)
+                    .stroke(
+                        AngularGradient(
+                            gradient: StrandPalette.recoveryGradient,
+                            center: .center,
+                            startAngle: startAngle,
+                            endAngle: endAngle
+                        ),
+                        style: StrokeStyle(lineWidth: lineWidth * 1.05, lineCap: .round)
+                    )
+                    .blur(radius: bloomRadius)
+                    .opacity(bloomOpacity * (bloomPulse ? 1.0 : 0.78))
+                    .animation(StrandMotion.breathe, value: bloomPulse)
+                    .blendMode(.plusLighter)
+            }
 
             // Faint full-span track (remainder).
             arcShape(to: 1.0)
@@ -158,14 +168,14 @@ public struct RecoveryRing: View {
                 y: center.y + radius * sin(tipAngle)
             )
             ZStack {
-                // soft halo
-                Circle()
-                    .fill(tipColor)
-                    .frame(width: lineWidth * 2.4, height: lineWidth * 2.4)
-                    .blur(radius: lineWidth * 0.9)
-                    .opacity(0.7)
-                    .blendMode(.plusLighter)
-                // bright core
+                if !StrandPerf.reducedEffects {
+                    Circle()
+                        .fill(tipColor)
+                        .frame(width: lineWidth * 2.4, height: lineWidth * 2.4)
+                        .blur(radius: lineWidth * 0.9)
+                        .opacity(0.7)
+                        .blendMode(.plusLighter)
+                }
                 Circle()
                     .fill(Color.white)
                     .frame(width: lineWidth * 0.62, height: lineWidth * 0.62)
@@ -182,7 +192,7 @@ public struct RecoveryRing: View {
             Text(numberString)
                 .font(StrandFont.display(diameter * 0.30))
                 .foregroundStyle(StrandPalette.textPrimary)
-                .contentTransition(.numericText())
+                .noopNumericText(value: numberString)
             Text(stateWord)
                 .font(StrandFont.overline)
                 .tracking(StrandFont.overlineTracking)

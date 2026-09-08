@@ -698,7 +698,7 @@ private struct OverlayChart: View {
                 }
                 .animation(StrandMotion.fade, value: hoverX)
                 .contentShape(Rectangle())
-                .onContinuousHover(coordinateSpace: .local) { phase in
+                .noopContinuousHover { phase in
                     switch phase {
                     case .active(let location): hoverX = location.x
                     case .ended: hoverX = nil

@@ -8,12 +8,22 @@ enum WhoopImporter {
 
     @discardableResult
     static func importExport(url: URL, into store: WhoopStore, deviceId: String) async throws -> ImportSummary {
-        let result = try ImportCoordinator().importWhoopExport(from: url)
+        // ZIP + CSV parse is CPU and memory heavy. AppModel is @MainActor, so an unstructured
+        // Task would inherit the main actor and freeze (then jetsam) the iPhone during import.
+        let result = try await Task.detached(priority: .userInitiated) {
+            try ImportCoordinator().importWhoopExport(from: url)
+        }.value
 
         // physiological_cycles → DailyMetric (one row per sleep-to-sleep day)
         var metrics: [DailyMetric] = []
         for c in result.cycles {
             guard let start = c.cycleStart else { continue }
+            // Skip the trailing in-progress cycle (blank recovery/strain/HRV/sleep) so
+            // `days.last` is a real scored day after import — the usual reason a WHOOP
+            // export "imported" but Today stayed empty.
+            let hasSignal = c.recoveryScore != nil || c.dayStrain != nil
+                || c.hrvMs != nil || c.restingHeartRate != nil || c.asleepDurationMin != nil
+            guard hasSignal else { continue }
             metrics.append(DailyMetric(
                 day: dayString(start, tzOffsetMin: c.tzOffsetMin),
                 totalSleepMin: c.asleepDurationMin,

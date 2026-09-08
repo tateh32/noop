@@ -18,7 +18,11 @@ struct ScreenScaffold<Content: View>: View {
                 }
                 content()
             }
+            #if os(iOS)
+            .padding(16)
+            #else
             .padding(28)
+            #endif
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(StrandPalette.surfaceBase)

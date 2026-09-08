@@ -68,8 +68,7 @@ struct LiveView: View {
                 Text(displayHR.map(String.init) ?? "—")
                     .font(.system(size: 96, weight: .semibold).monospacedDigit())
                     .foregroundStyle(displayHR == nil ? StrandPalette.textTertiary : StrandPalette.accent)
-                    .contentTransition(.numericText())
-                    .animation(.snappy, value: displayHR)
+                    .noopNumericText(value: displayHR)
                 Text("bpm").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                 if !live.rr.isEmpty {
                     Text("R-R: " + live.rr.suffix(4).map(String.init).joined(separator: " · ") + " ms")
@@ -125,29 +124,36 @@ struct LiveView: View {
     // MARK: - Controls
 
     private var controls: some View {
-        HStack(spacing: 12) {
-            Button { model.scan(model: selectedModel) } label: {
-                Label(live.connected ? "Re-scan" : "Scan & Connect",
-                      systemImage: "antenna.radiowaves.left.and.right")
-                    .frame(maxWidth: .infinity).padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent).tint(StrandPalette.accent)
+        #if os(iOS)
+        VStack(spacing: 10) { controlButtons }
+        #else
+        HStack(spacing: 12) { controlButtons }
+        #endif
+    }
 
-            Button { model.buzz() } label: {
-                Label("Buzz strap", systemImage: "waveform.path")
-                    .frame(maxWidth: .infinity).padding(.vertical, 8)
-            }
-            .buttonStyle(.bordered).tint(StrandPalette.accent)
-            .disabled(!live.bonded)
-            .help("Fire a test haptic buzz on the strap (requires a bonded connection)")
-
-            Button(role: .destructive) { model.disconnect() } label: {
-                Label("Disconnect", systemImage: "xmark.circle")
-                    .frame(maxWidth: .infinity).padding(.vertical, 8)
-            }
-            .buttonStyle(.bordered)
-            .disabled(!live.connected)
+    @ViewBuilder
+    private var controlButtons: some View {
+        Button { model.scan(model: selectedModel) } label: {
+            Label(live.connected ? "Re-scan" : "Scan & Connect",
+                  systemImage: "antenna.radiowaves.left.and.right")
+                .frame(maxWidth: .infinity).padding(.vertical, 8)
         }
+        .buttonStyle(.borderedProminent).tint(StrandPalette.accent)
+
+        Button { model.buzz() } label: {
+            Label("Buzz strap", systemImage: "waveform.path")
+                .frame(maxWidth: .infinity).padding(.vertical, 8)
+        }
+        .buttonStyle(.bordered).tint(StrandPalette.accent)
+        .disabled(!live.bonded)
+        .help("Fire a test haptic buzz on the strap (requires a bonded connection)")
+
+        Button(role: .destructive) { model.disconnect() } label: {
+            Label("Disconnect", systemImage: "xmark.circle")
+                .frame(maxWidth: .infinity).padding(.vertical, 8)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!live.connected)
     }
 
     // MARK: - Strap log
