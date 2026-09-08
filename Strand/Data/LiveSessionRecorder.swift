@@ -142,7 +142,7 @@ final class LiveSessionRecorder: ObservableObject {
             endTs: Int(end.timeIntervalSince1970),
             sport: sport, source: "logged",
             durationS: duration, energyKcal: kcal, avgHr: meanHR, maxHr: peakHR,
-            strain: nil, distanceM: dist, zonesJSON: nil,
+            strain: Double?.none, distanceM: dist, zonesJSON: String?.none,
             notes: noteBits.joined(separator: " · "))
         running = false
         hrProvider = nil
