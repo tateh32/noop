@@ -53,4 +53,18 @@ final class WorkoutMergeTests: XCTestCase {
         let merged = Repository.mergeWorkouts(imported: [a], apple: [b], computed: [c])
         XCTAssertEqual(merged.map(\.startTs), [500, 300, 100])
     }
+
+    func testLoggedKeptEvenWhenOverlappingWhoop() {
+        let whoop = row(start: 1_000, end: 4_000, source: "whoop")
+        let logged = row(start: 2_000, end: 3_000, sport: "Running", source: "logged")
+        let merged = Repository.mergeWorkouts(imported: [whoop], apple: [], computed: [logged])
+        XCTAssertEqual(Set(merged.map(\.source)), ["whoop", "logged"])
+    }
+
+    func testLoggedSourceHelper() {
+        XCTAssertTrue(Repository.isLoggedSource("logged"))
+        XCTAssertFalse(Repository.isLoggedSource("noop"))
+        XCTAssertFalse(Repository.isLoggedSource("whoop"))
+        XCTAssertFalse(Repository.isLoggedSource("apple_health"))
+    }
 }

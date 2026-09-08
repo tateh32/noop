@@ -321,6 +321,9 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Train", overline: "Work",
                           trailing: workoutsToday.isEmpty ? "No session today" : "\(workoutsToday.count) today")
+            LogWorkoutEntryLink {
+                Task { await reloadWorkouts() }
+            }
             LazyVGrid(columns: grid, alignment: .leading, spacing: NoopMetrics.gap) {
                 NavigationLink {
                     BreathingView()
@@ -343,7 +346,7 @@ struct TodayView: View {
                 NavigationLink {
                     WorkoutsView()
                 } label: {
-                    StatTile(label: "Workouts", value: workouts.isEmpty ? "Log" : "\(workouts.count)",
+                    StatTile(label: "History", value: workouts.isEmpty ? "—" : "\(workouts.count)",
                              caption: "All sessions",
                              accent: StrandPalette.textPrimary)
                 }
@@ -460,6 +463,12 @@ struct TodayView: View {
         workouts = await repo.workoutRows(days: PhoneBudget.workoutQueryDays)
         appleDays = await repo.appleDailyRows(days: PhoneBudget.sparkQueryDays)
     }
+
+    #if os(iOS)
+    private func reloadWorkouts() async {
+        workouts = await repo.workoutRows(days: PhoneBudget.workoutQueryDays)
+    }
+    #endif
 
     /// Trailing-window values for a metric, with the sparse-data fallback:
     /// if the trailing window has <2 points, fall back to a longer (still capped)

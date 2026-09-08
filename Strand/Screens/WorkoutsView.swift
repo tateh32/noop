@@ -31,9 +31,12 @@ struct WorkoutsView: View {
 
     var body: some View {
         ScreenScaffold(title: "Workouts", subtitle: "Every session, threaded together.") {
+            LogWorkoutEntryLink {
+                Task { await reloadRows() }
+            }
             if allRows.isEmpty {
                 ComingSoon(what: loaded
-                    ? "No workouts yet. They come from a WHOOP export, an Apple Health export, or the strap while NOOP is connected. Import in Data Sources, or wear the strap overnight."
+                    ? "Nothing in the log yet. Tap Log a session above — no Apple Watch needed. A WHOOP export, an Apple Health export, or the strap overnight will fill history too."
                     : "Loading your sessions…")
             } else {
                 // Compute the windowed rows and per-sport groups ONCE per body
@@ -63,6 +66,13 @@ struct WorkoutsView: View {
             // Preview-seeded rows skip `.task`; still choose a range that has data.
             if loaded { range = defaultRange(for: allRows) }
         }
+    }
+
+    private func reloadRows() async {
+        let r = await repo.workoutRows()
+        allRows = r
+        loaded = true
+        range = defaultRange(for: r)
     }
 
     // MARK: - Range control
@@ -372,6 +382,7 @@ struct WorkoutsView: View {
         let lower = source.lowercased()
         let (label, tint): (String, Color) = {
             if lower.contains("whoop") { return ("Whoop", StrandPalette.accent) }
+            if lower.contains("log") { return ("Logged", StrandPalette.metricAmber) }
             if lower.contains("noop") { return ("NOOP", StrandPalette.textPrimary) }
             return ("Apple", StrandPalette.metricCyan)
         }()
@@ -583,10 +594,13 @@ struct CurrentWorkoutsView: View {
     var body: some View {
         ScreenScaffold(title: "Current",
                        subtitle: "Today’s sessions, or the latest if you haven’t trained yet.") {
+            LogWorkoutEntryLink {
+                Task { await reload() }
+            }
             if !loaded {
                 ComingSoon(what: "Loading your sessions…")
             } else if rows.isEmpty {
-                ComingSoon(what: "No workouts yet. They come from a WHOOP export, an Apple Health export, or the strap while NOOP is connected. You don’t need an Apple Watch or Garmin — the WHOOP strap is the device. Import in Data Sources, or wear the strap overnight.")
+                ComingSoon(what: "Nothing today yet. Tap Log a session above — no Apple Watch needed. Import a WHOOP zip, or wear the strap overnight, to backfill the rest.")
             } else {
                 if todayRows.isEmpty {
                     DataPendingNote(
@@ -613,9 +627,13 @@ struct CurrentWorkoutsView: View {
             }
         }
         .task {
-            rows = await repo.workoutRows()
-            loaded = true
+            await reload()
         }
+    }
+
+    private func reload() async {
+        rows = await repo.workoutRows()
+        loaded = true
     }
 
     private func currentCard(_ row: WorkoutRow) -> some View {
@@ -672,6 +690,7 @@ struct CurrentWorkoutsView: View {
         let lower = source.lowercased()
         let (label, tint): (String, Color) = {
             if lower.contains("whoop") { return ("Whoop", StrandPalette.accent) }
+            if lower.contains("log") { return ("Logged", StrandPalette.metricAmber) }
             if lower.contains("noop") { return ("NOOP", StrandPalette.textPrimary) }
             return ("Apple", StrandPalette.metricCyan)
         }()

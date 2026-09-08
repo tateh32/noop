@@ -195,19 +195,38 @@ final class Repository: ObservableObject {
         return Self.mergeWorkouts(imported: imported, apple: apple, computed: computed)
     }
 
-    /// Imported WHOOP and Apple Health rows win when they overlap a strap-detected bout.
+    /// Imported WHOOP and Apple Health rows win over strap-detected bouts when they
+    /// overlap. Phone-logged sessions (`source` contains "log") always stay.
     static func mergeWorkouts(imported: [WorkoutRow], apple: [WorkoutRow],
                               computed: [WorkoutRow]) -> [WorkoutRow] {
         let preferred = imported + apple
-        var out = preferred
-        for row in computed where !preferred.contains(where: { workoutsOverlap($0, row) }) {
+        let logged = computed.filter { isLoggedSource($0.source) }
+        let detected = computed.filter { !isLoggedSource($0.source) }
+        var out = preferred + logged
+        for row in detected where !preferred.contains(where: { workoutsOverlap($0, row) }) {
             out.append(row)
         }
         return out.sorted { $0.startTs > $1.startTs }
     }
 
+    static func isLoggedSource(_ source: String) -> Bool {
+        source.lowercased().contains("log")
+    }
+
     static func workoutsOverlap(_ a: WorkoutRow, _ b: WorkoutRow) -> Bool {
         a.startTs < b.endTs && b.startTs < a.endTs
+    }
+
+    /// Phone-logged session (Today → Train). Stored beside strap-detected bouts.
+    @discardableResult
+    func logWorkout(_ row: WorkoutRow) async -> Bool {
+        guard let store = await ensureStore() else { return false }
+        do {
+            _ = try await store.upsertWorkouts([row], deviceId: computedDeviceId)
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// Apple Health daily aggregates (steps/energy/vo2/hr).
