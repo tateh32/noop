@@ -10,12 +10,16 @@ struct SettingsSection<Content: View>: View {
     let title: String
     var blurb: String? = nil
     @ViewBuilder var content: () -> Content
+    @Environment(\.noopAppearance) private var appearance
 
     var body: some View {
         StrandCard(padding: 20) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
-                    Image(systemName: icon).foregroundStyle(StrandPalette.accent).accessibilityHidden(true)
+                    Image(systemName: icon)
+                        .foregroundStyle(appearance.accent)
+                        .symbolRenderingMode(.hierarchical)
+                        .accessibilityHidden(true)
                     Text(title).font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
                 }
                 if let blurb {
