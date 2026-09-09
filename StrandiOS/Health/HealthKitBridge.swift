@@ -13,6 +13,10 @@ import StrandAnalytics
 @MainActor
 final class HealthKitBridge: ObservableObject {
     static let enabledKey = "noop.healthKitSync"
+    private static let hrWatermarkKey = "noop.hk.hrTs"
+    private static let sleepWatermarkKey = "noop.hk.sleepEnd"
+    private static let workoutWatermarkKey = "noop.hk.workoutEnd"
+    private static let dailyWatermarkKey = "noop.hk.dailyDay"
 
     @Published var enabled: Bool {
         didSet {
@@ -78,13 +82,34 @@ final class HealthKitBridge: ObservableObject {
         guard enabled, isAvailable else { return }
         if Date().timeIntervalSince(lastPushAt) < 120 { return }
         lastPushAt = Date()
+        let d = UserDefaults.standard
+        let sleepCut = d.integer(forKey: Self.sleepWatermarkKey)
+        let workoutCut = d.integer(forKey: Self.workoutWatermarkKey)
+        let hrCut = d.integer(forKey: Self.hrWatermarkKey)
+        let dayCut = d.string(forKey: Self.dailyWatermarkKey) ?? ""
+        let newSleeps = HealthKitMapper.sleepsAfter(sleeps, endTs: sleepCut)
+        let newWorkouts = HealthKitMapper.workoutsAfter(workouts, endTs: workoutCut)
+        let newHR = hr.filter { $0.ts > hrCut }
+        let newDays = HealthKitMapper.daysAfter(days, day: dayCut)
         var samples: [HKSample] = []
-        samples.append(contentsOf: Self.sleepSamples(sleeps))
-        samples.append(contentsOf: Self.workoutSamples(workouts))
-        samples.append(contentsOf: Self.quantitySamples(days: days, hr: hr))
+        samples.append(contentsOf: Self.sleepSamples(newSleeps))
+        samples.append(contentsOf: Self.workoutSamples(newWorkouts))
+        samples.append(contentsOf: Self.quantitySamples(days: newDays, hr: newHR))
         guard !samples.isEmpty else { return }
         do {
             try await save(samples)
+            if let t = newSleeps.map(\.endTs).max() {
+                d.set(max(sleepCut, t), forKey: Self.sleepWatermarkKey)
+            }
+            if let t = newWorkouts.map(\.endTs).max() {
+                d.set(max(workoutCut, t), forKey: Self.workoutWatermarkKey)
+            }
+            if let t = newHR.map(\.ts).max() {
+                d.set(max(hrCut, t), forKey: Self.hrWatermarkKey)
+            }
+            if let day = newDays.map(\.day).max() {
+                d.set(day, forKey: Self.dailyWatermarkKey)
+            }
         } catch {
             lastError = error.localizedDescription
         }
@@ -92,8 +117,15 @@ final class HealthKitBridge: ObservableObject {
 
     func writeWorkout(_ row: WorkoutRow) async {
         guard enabled, isAvailable else { return }
+        let cut = UserDefaults.standard.integer(forKey: Self.workoutWatermarkKey)
+        guard row.endTs > cut else { return }
         let samples = Self.workoutSamples([row])
-        try? await save(samples)
+        do {
+            try await save(samples)
+            UserDefaults.standard.set(max(cut, row.endTs), forKey: Self.workoutWatermarkKey)
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     // MARK: Auth

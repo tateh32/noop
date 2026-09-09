@@ -41,6 +41,32 @@ final class HealthKitMapperTests: XCTestCase {
         XCTAssertEqual(HealthKitMapper.recoveryMetadata(score: 72)["NOOPRecovery"], 72)
     }
 
+    func testWriteWatermarksSkipOlder() {
+        let old = CachedSleepSession(startTs: 100, endTs: 200, efficiency: nil,
+                                       restingHr: nil, avgHrv: nil, stagesJSON: nil)
+        let fresh = CachedSleepSession(startTs: 300, endTs: 400, efficiency: nil,
+                                         restingHr: nil, avgHrv: nil, stagesJSON: nil)
+        XCTAssertEqual(HealthKitMapper.sleepsAfter([old, fresh], endTs: 200).map(\.endTs), [400])
+        let wOld = WorkoutRow(startTs: 1, endTs: 10, sport: "Running", source: "logged",
+                              durationS: 9, energyKcal: nil, avgHr: nil, maxHr: nil, strain: nil,
+                              distanceM: nil, zonesJSON: nil, notes: nil)
+        let wNew = WorkoutRow(startTs: 20, endTs: 50, sport: "Running", source: "logged",
+                              durationS: 30, energyKcal: nil, avgHr: nil, maxHr: nil, strain: nil,
+                              distanceM: nil, zonesJSON: nil, notes: nil)
+        XCTAssertEqual(HealthKitMapper.workoutsAfter([wOld, wNew], endTs: 10).map(\.endTs), [50])
+        let dOld = DailyMetric(day: "2026-09-07", totalSleepMin: 450, efficiency: nil,
+                               deepMin: nil, remMin: nil, lightMin: nil, disturbances: nil,
+                               restingHr: nil, avgHrv: nil, recovery: 70, strain: nil,
+                               exerciseCount: nil)
+        let dNew = DailyMetric(day: "2026-09-09", totalSleepMin: 450, efficiency: nil,
+                               deepMin: nil, remMin: nil, lightMin: nil, disturbances: nil,
+                               restingHr: nil, avgHrv: nil, recovery: 80, strain: nil,
+                               exerciseCount: nil)
+        XCTAssertEqual(HealthKitMapper.daysAfter([dOld, dNew], day: "2026-09-07").map(\.day),
+                       ["2026-09-09"])
+        XCTAssertEqual(HealthKitMapper.daysAfter([dOld], day: "").count, 1)
+    }
+
     func testCachedSleepSessionsFromIntervals() {
         let start = Date(timeIntervalSince1970: 1_700_000_000)  // 2023-11-14 22:13 UTC
         let ivs = [

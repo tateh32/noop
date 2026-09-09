@@ -72,6 +72,20 @@ enum HealthKitMapper {
         ["NOOPRecovery": score]
     }
 
+    /// Incremental Health writes: only samples newer than the last successful push.
+    static func sleepsAfter(_ sleeps: [CachedSleepSession], endTs: Int) -> [CachedSleepSession] {
+        sleeps.filter { $0.endTs > endTs }
+    }
+
+    static func workoutsAfter(_ rows: [WorkoutRow], endTs: Int) -> [WorkoutRow] {
+        rows.filter { $0.endTs > endTs }
+    }
+
+    static func daysAfter(_ days: [DailyMetric], day: String) -> [DailyMetric] {
+        guard !day.isEmpty else { return days }
+        return days.filter { $0.day > day }
+    }
+
     static func cachedSleepSessions(from intervals: [SleepStageInterval]) -> [CachedSleepSession] {
         struct Acc {
             var start: Date
