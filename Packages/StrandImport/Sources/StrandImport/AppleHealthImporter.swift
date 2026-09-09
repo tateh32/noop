@@ -168,6 +168,12 @@ public struct AppleHealthImporter {
         }
         return nil
     }
+
+    /// Strip the HealthKit identifier prefix from a type string.
+    /// `HKQuantityTypeIdentifierHeartRate` → `HeartRate`.
+    public static func stripPrefix(_ raw: String) -> String {
+        HealthXMLDelegate.stripPrefix(raw)
+    }
 }
 
 // MARK: - SAX delegate
@@ -430,7 +436,7 @@ final class HealthXMLDelegate: NSObject, XMLParserDelegate {
     /// `HKQuantityTypeIdentifierHeartRate` → `HeartRate`,
     /// `HKCategoryTypeIdentifierSleepAnalysis` → `SleepAnalysis`,
     /// `HKWorkoutActivityTypeRunning` → `Running`.
-    static func stripPrefix(_ raw: String) -> String {
+    public static func stripPrefix(_ raw: String) -> String {
         let prefixes = [
             "HKQuantityTypeIdentifier",
             "HKCategoryTypeIdentifier",

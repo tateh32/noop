@@ -41,5 +41,27 @@ struct ContentView: View {
                 showWhatsNew = true
             }
         }
+        .background(ScenePhaseBridge())
+    }
+}
+
+/// Routes scene-phase transitions into `AppModel` from a leaf view.
+///
+/// `ContentView` used to observe `AppModel` directly for this, which meant the
+/// whole app shell was invalidated whenever the model published — and it
+/// publishes live heart rate about once a second. This view's body is empty, so
+/// observing here costs nothing.
+private struct ScenePhaseBridge: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onChange(of: scenePhase) { phase in
+                model.handleScenePhase(phase)
+            }
     }
 }

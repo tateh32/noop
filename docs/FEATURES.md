@@ -269,8 +269,13 @@ Windows are taken relative to your latest recorded day and auto-widen on sparse 
 **Sidebar: Workouts · iPhone: Train tab for live Start / Stop; history still under Workouts.**
 
 On iPhone, **Train** in the tab bar is a live session: Start / Stop on this phone
-(GPS on run/walk/ride/hike, WHOOP HR if the strap is bonded). Log a session after
+(GPS on run/walk/ride/hike, WHOOP HR if the strap is bonded). The session is
+checkpointed on the phone so locking the screen or a memory kill does not wipe
+it; opening the app again resumes elapsed time, GPS and HR. Log a session after
 the fact from Today. There is no Apple Watch app.
+
+Sleep on iPhone scores the local night window (18:00–14:00) and loads the newest
+nights, then offloads from the strap when you open the app in the morning.
 
 `WorkoutsView.swift` — the activity log, threaded together:
 
@@ -424,9 +429,15 @@ React when the strap comes off or goes on:
   15 minutes**, off by default.
 
 ### Smart alarm
+
+**Lives on the Sleep screen**, under last night — it is a sleep decision, not a desk automation.
+Automations links across to it.
+
 Wake to a wrist buzz. This arms the strap's **own firmware alarm**, so it still fires even if the
-Mac is asleep or NOOP is closed. Set your wake time, and an optional **light-sleep window** (wake
-up to N minutes early if the Mac stays awake and connected and a light phase is detected).
+Mac is asleep or NOOP is closed. Set your wake time; changing it re-arms the strap immediately.
+
+The **light-sleep window** is stored but **not yet active**: waking early on a detected light phase
+needs live overnight staging, which is not wired up. The alarm fires at the time you set.
 
 Mac side-effects are sandbox-friendly: screen lock uses macOS's own lock entry point, and
 Shortcuts run via the `shortcuts://` URL scheme — anything you can build in Shortcuts is reachable.

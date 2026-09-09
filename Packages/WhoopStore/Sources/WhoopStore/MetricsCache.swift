@@ -123,13 +123,17 @@ extension WhoopStore {
 
     // MARK: - Reads
 
-    /// Cached sleep sessions overlapping [from, to] (by startTs), oldest first.
-    public func sleepSessions(deviceId: String, from: Int, to: Int, limit: Int) async throws -> [CachedSleepSession] {
-        try syncRead { db in
+    /// Cached sleep sessions overlapping [from, to] (by startTs).
+    /// `newestFirst` is required on iPhone: a 400-day import + `LIMIT 90` oldest-first
+    /// hid last night behind months of history, so Sleep never appeared to update.
+    public func sleepSessions(deviceId: String, from: Int, to: Int, limit: Int,
+                              newestFirst: Bool = false) async throws -> [CachedSleepSession] {
+        let order = newestFirst ? "DESC" : "ASC"
+        return try syncRead { db in
             try Row.fetchAll(db, sql: """
                 SELECT startTs, endTs, efficiency, restingHr, avgHrv, stagesJSON FROM sleepSession
                 WHERE deviceId = ? AND startTs >= ? AND startTs <= ?
-                ORDER BY startTs ASC LIMIT ?
+                ORDER BY startTs \(order) LIMIT ?
                 """, arguments: [deviceId, from, to, limit])
                 .map {
                     CachedSleepSession(startTs: $0["startTs"], endTs: $0["endTs"],

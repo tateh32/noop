@@ -17,6 +17,86 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.4.0 — Smart wake, HealthKit, Live Activity, sleep debt, sync status
+
+iPhone-facing work on top of 1.3.9. The strap firmware alarm is still the safety net;
+the rest is phone-side.
+
+- **Smart wake is live.** In the light-sleep window, while this iPhone stays
+  connected, NOOP stages the last half hour of HR/gravity and may buzz the strap
+  early on a light phase. The firmware alarm still fires at the time you set if
+  the phone is gone or no light phase appears. Sleep's card copy says this.
+- **HealthKit two-way sync (opt-in).** Data Sources has a toggle. Reads sleep and
+  workouts live; writes NOOP sleep, workouts, HR, HRV and recovery metadata.
+  Nothing leaves the device. Enable the HealthKit capability on your Apple team.
+- **Live Activity during a Train session** — elapsed time and heart rate on the
+  Lock Screen (iOS 16.1+). Restores after a memory kill with the workout snapshot.
+- **Today sync line** — last offload, records pending, last night scored.
+- **Sleep debt bedtime** — “to clear your debt, be in bed by 22:40” (or similar)
+  on Sleep and Today.
+
+```bash
+git fetch origin cursor/workout-sleep-tracking-67db
+git checkout cursor/workout-sleep-tracking-67db
+git checkout -- StrandiOS/Resources/Info.plist
+xcodegen generate
+```
+
+Scheme **NOOPiOS**. Personal Team. Rebuild on the phone.
+
+## 1.3.9 — Smart alarm lives on Sleep
+
+- **Smart alarm moved to Sleep**, under last night, where you actually think about
+  wake time. Automations keeps a pointer to it. Changing the light-sleep window
+  now re-arms the strap (it silently did nothing before).
+- **The light-sleep window says what it is:** still building. Your alarm fires at
+  the time you set; NOOP does not yet wake you early on a detected light phase.
+
+Fixes found in a full review pass over the iPhone target:
+
+- **Sleep could show "no nights yet" for a night it had already scored.** The
+  `stagesJSON` column has two shapes — a minutes dict from an import, hypnogram
+  segments from on-device scoring — and the screen only read the first.
+- **A failed "Stop and save" lost the workout.** The session was torn down before
+  the write succeeded, so the retry had nothing left to save.
+- **Scoring had four independent triggers and no mutual exclusion**, so passes
+  overlapped, each holding several nights of 1 Hz samples.
+- **The newest two nights are always rescored**, so a pass that ran before the
+  strap finished offloading can't freeze last night as "done".
+- **"Bonded" could be a lie:** the flag was never cleared on disconnect.
+- **Realtime heart rate is released when a workout ends** instead of being
+  re-armed by keep-alive every 30 seconds forever.
+- Workout heart-rate stats are computed incrementally, and the crash-recovery
+  snapshot stores totals instead of re-encoding a 29,000-entry array every 15s.
+- Locked-screen GPS uses "While Using the App" plus the background indicator —
+  no second Always prompt.
+- The app shell no longer re-renders on every heartbeat.
+- The 30-day sleep trend no longer shifts every point by a day west of Greenwich.
+
+## 1.3.8 — Workout keeps going; last night actually shows
+
+After a day on the iPhone build: a live workout froze once the phone locked, and
+sleep did not move after overnight wear even though Today’s date was correct.
+
+- **Live workout:** elapsed time is computed from start, HR is recorded from strap
+  notifications (not only a UI timer), the session is saved to disk every 15 s so
+  a jetsam/kill can resume it, and outdoor sports can keep GPS after you lock the
+  screen (Allow Location → Always when asked).
+- **Sleep / last night:** Sleep was loading the *oldest* 90 imported nights, so a
+  WHOOP zip made `Last night` a date from months ago. It now loads the newest.
+  Scoring now reads the 18:00–14:00 local night instead of the first 24k samples
+  of yesterday afternoon. Opening the app kicks a strap offload and rescore
+  (that 15-min timer does not run while iOS has the app suspended). If gravity
+  never landed, a long low-HR night still stages as sleep.
+
+```bash
+git fetch origin cursor/workout-sleep-tracking-67db
+git checkout cursor/workout-sleep-tracking-67db
+xcodegen generate
+```
+
+Scheme **NOOPiOS**. Personal Team. Rebuild on the phone.
+
 ## 1.3.7 — Train is a tab (Start / Stop)
 
 The Start / Stop workout was easy to miss: the **Live** tab is strap heart rate,

@@ -29,8 +29,10 @@ enum PhoneBudget {
     /// Nights the on-device scorer walks per pass.
     static var intelligenceDays: Int { isPhone ? 3 : 21 }
 
-    /// Per-stream sample cap for one intelligence night (1 Hz × ~7 h ≈ 25k).
-    static var intelligenceSampleLimit: Int { isPhone ? 24_000 : 200_000 }
+    /// Per-stream sample cap for one intelligence night. The night window is
+    /// 20 h (18:00–14:00); 80k covers 1 Hz across that span so last night is
+    /// not truncated to yesterday afternoon.
+    static var intelligenceSampleLimit: Int { isPhone ? 80_000 : 200_000 }
 
     /// Year-heat cells. A full multi-year strip is thousands of SwiftUI views.
     static var heatStripMaxDays: Int { isPhone ? 180 : 4000 }
