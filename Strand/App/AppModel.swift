@@ -28,6 +28,10 @@ final class AppModel: ObservableObject {
     let coach: AICoachEngine
     /// In-progress Start/Stop workout (GPS + strap HR). Survives tab switches.
     let session = LiveSessionRecorder()
+    #if os(iOS)
+    /// Two-way Apple Health. iOS only; opt-in from Data Sources.
+    let healthKit = HealthKitBridge()
+    #endif
 
     /// Timestamps of moments marked via a double-tap (persisted).
     @Published var moments: [Date] = []
@@ -49,6 +53,12 @@ final class AppModel: ObservableObject {
     @Published var bpm: Int?
     private var hrWindow: [(t: Date, v: Double)] = []
     private var hrCancellables = Set<AnyCancellable>()
+    /// Trailing ~30 min of live HR for smart-wake staging.
+    private var wakeHR: [HRSample] = []
+    private var wakeGravity: [GravitySample] = []
+    private var lastWakeEval = Date.distantPast
+    private var lastGravityFetch = Date.distantPast
+    private var lastHealthKitSync = Date.distantPast
 
     init() {
         let live = LiveState()
@@ -61,8 +71,15 @@ final class AppModel: ObservableObject {
         live.$heartRate.sink { [weak self] _ in self?.ingestHR() }.store(in: &hrCancellables)
         live.$rr.sink { [weak self] _ in self?.ingestHR() }.store(in: &hrCancellables)
         live.$bonded.sink { [weak self] bonded in
-            guard let self, bonded, self.session.running else { return }
-            self.startRealtimeHR()
+            guard let self else { return }
+            if bonded {
+                self.applySmartAlarm()
+                if self.session.running { self.startRealtimeHR() }
+            } else {
+                #if os(iOS)
+                self.ble.setSmartWakeMonitoring(false)
+                #endif
+            }
         }.store(in: &hrCancellables)
 
         // Physical-input + wear hooks (fired live by FrameRouter).
@@ -90,6 +107,7 @@ final class AppModel: ObservableObject {
                 // Don't score during first-run onboarding — the wizard is already animating.
                 if UserDefaults.standard.bool(forKey: "noop.onboarded") {
                     await self.intelligence.analyzeRecent()
+                    await self.syncHealthKit()
                     try? await Task.sleep(nanoseconds: 900_000_000_000)  // 15 min, matches the offload cadence
                 } else {
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
@@ -101,12 +119,18 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self, UserDefaults.standard.bool(forKey: "noop.onboarded") else { return }
                 await self.intelligence.analyzeRecent()
+                await self.syncHealthKit()
             }
         }
 
         // A finished workout must release the heavy realtime stream, or keep-alive
         // re-arms it every 30s forever and the strap keeps flooding frames.
         session.onSessionEnded = { [weak self] in self?.stopRealtimeHR() }
+        session.onWorkoutSaved = { [weak self] row in
+            #if os(iOS)
+            Task { await self?.healthKit.writeWorkout(row) }
+            #endif
+        }
 
         // Arm the strap alarm from the settings themselves, so every surface that
         // edits them (now the Sleep screen) stays in sync — including the window,
@@ -125,6 +149,14 @@ final class AppModel: ObservableObject {
            live.bonded {
             startRealtimeHR()
         }
+        #if os(iOS)
+        healthKit.onExternalChange = { [weak self] in
+            Task { await self?.syncHealthKit() }
+        }
+        if healthKit.enabled {
+            Task { await self.healthKit.start() }
+        }
+        #endif
     }
 
     /// iPhone: opening the app in the morning must kick a historical offload and
@@ -140,6 +172,7 @@ final class AppModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 if UserDefaults.standard.bool(forKey: "noop.onboarded") {
                     await self.intelligence.analyzeRecent()
+                    await self.syncHealthKit()
                 }
             }
         case .background:
@@ -173,6 +206,7 @@ final class AppModel: ObservableObject {
         if next != bpm { bpm = next }
         if session.running { session.noteHR(next) }
         evaluateStress()
+        if behavior.smartAlarmEnabled { noteSmartWakeHR() }
     }
 
     /// Experimental resting stress nudge: track RMSSD vs a slow baseline; when HRV drops well below
@@ -238,13 +272,80 @@ final class AppModel: ObservableObject {
     /// Arm (or clear) the strap's firmware alarm from the smart-alarm settings. The firmware alarm
     /// fires even if the Mac is asleep / NOOP is closed. No-op until bonded (send is gated on bond).
     func applySmartAlarm() {
-        guard behavior.smartAlarmEnabled else { ble.disableStrapAlarm(); return }
-        let cal = Calendar.current
-        let now = Date()
-        var next = cal.date(bySettingHour: behavior.smartAlarmMinutes / 60,
-                            minute: behavior.smartAlarmMinutes % 60, second: 0, of: now) ?? now
-        if next <= now { next = cal.date(byAdding: .day, value: 1, to: next) ?? next }
+        guard behavior.smartAlarmEnabled else {
+            ble.disableStrapAlarm()
+            #if os(iOS)
+            ble.setSmartWakeMonitoring(false)
+            #endif
+            SmartWake.forgetFired()
+            return
+        }
+        let next = SmartWake.nextTargetWake(minutesFromMidnight: behavior.smartAlarmMinutes, now: Date())
         ble.armStrapAlarm(at: next)
+        evaluateSmartWake(force: true)
+    }
+
+    /// Fold a live beat into the 30-minute staging buffer and maybe fire early.
+    private func noteSmartWakeHR() {
+        guard let bpm else { return }
+        let ts = Int(Date().timeIntervalSince1970)
+        wakeHR.append(HRSample(ts: ts, bpm: bpm))
+        let cut = ts - 30 * 60
+        if wakeHR.count > 16 { wakeHR.removeAll { $0.ts < cut } }
+        if wakeHR.count > 2_400 { wakeHR.removeFirst(wakeHR.count - 2_400) }
+        evaluateSmartWake(force: false)
+    }
+
+    private func evaluateSmartWake(force: Bool) {
+        guard behavior.smartAlarmEnabled else { return }
+        let now = Date()
+        if !force, now.timeIntervalSince(lastWakeEval) < 10 { return }
+        lastWakeEval = now
+        let target = SmartWake.nextTargetWake(minutesFromMidnight: behavior.smartAlarmMinutes, now: now)
+        let near = SmartWake.isInOrNearWindow(now: now, target: target,
+                                                windowMinutes: behavior.smartAlarmWindow)
+        #if os(iOS)
+        ble.setSmartWakeMonitoring(near && live.bonded)
+        #endif
+        guard near, live.bonded else { return }
+        if now.timeIntervalSince(lastGravityFetch) >= 20 {
+            lastGravityFetch = now
+            Task { [weak self] in
+                guard let self else { return }
+                let lo = Int(now.timeIntervalSince1970) - 30 * 60
+                self.wakeGravity = await self.repo.gravitySamples(from: lo, to: Int(now.timeIntervalSince1970))
+                self.finishSmartWake(now: Date(), target: target)
+            }
+            return
+        }
+        finishSmartWake(now: now, target: target)
+    }
+
+    private func finishSmartWake(now: Date, target: Date) {
+        let stage = SmartWake.classify(now: now, hr: wakeHR, gravity: wakeGravity)
+        let decision = SmartWake.decide(.init(
+            now: now, targetWake: target, windowMinutes: behavior.smartAlarmWindow,
+            enabled: behavior.smartAlarmEnabled, connected: live.bonded,
+            alreadyFired: SmartWake.alreadyFired(for: target), stage: stage))
+        if decision == .fireEarly {
+            SmartWake.rememberFired(target: target)
+            ble.testAlarmBuzz()
+            live.append(log: "Smart wake — light phase, buzzing early")
+        }
+    }
+
+    func syncHealthKit() async {
+        #if os(iOS)
+        guard healthKit.enabled else { return }
+        // Observer queries can fire in bursts; don't re-read Health + strap HR each time.
+        guard Date().timeIntervalSince(lastHealthKitSync) >= 45 else { return }
+        lastHealthKitSync = Date()
+        await healthKit.ingest(into: repo)
+        let lo = Int(Date().timeIntervalSince1970) - 86_400
+        let hr = await repo.hrSamples(from: lo, to: Int(Date().timeIntervalSince1970), limit: 4_000)
+        let workouts = await repo.workoutRows(days: 14)
+        await healthKit.pushNOOP(days: repo.days, sleeps: repo.sleeps, workouts: workouts, hr: hr)
+        #endif
     }
 
     // MARK: - Physical inputs / wear automation

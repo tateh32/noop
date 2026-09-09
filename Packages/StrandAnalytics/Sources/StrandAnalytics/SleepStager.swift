@@ -930,6 +930,64 @@ public enum SleepStager {
             lightMin: lightS / 60.0, deepPct: pct(deepS), remPct: pct(remS), lightPct: pct(lightS))
     }
 
+    // MARK: - Live current-stage (smart wake)
+
+    /// Approximate the *current* stage from a trailing window of live samples.
+    ///
+    /// Used by the overnight smart-wake loop, which only has the last ~30 minutes,
+    /// not a full night. Returns `"wake" | "light" | "deep" | "rem" | "unknown"`.
+    /// Thin windows (not enough HR *or* gravity) return `"unknown"` so the alarm
+    /// does not fire early on a guess.
+    public static func currentStage(now: Int,
+                                   hr: [HRSample] = [],
+                                   gravity: [GravitySample] = [],
+                                   windowS: Int = 30 * 60) -> String {
+        let lo = now - max(60, windowS)
+        let hrW = hr.filter { $0.ts >= lo && $0.ts <= now }.sorted { $0.ts < $1.ts }
+        let gW = gravity.filter { $0.ts >= lo && $0.ts <= now }.sorted { $0.ts < $1.ts }
+        guard hrW.count >= 8 || gW.count >= 8 else { return "unknown" }
+        // Full-night `stageSession` needs a real night of gravity. A 30–60 s
+        // synthetic window (and the first minutes of overnight staging) should
+        // not pretend to be a hypnogram — fall through to the short-window
+        // classifier so smart-wake tests and early-window live HR stay honest.
+        if gW.count >= 16, let first = gW.first, let last = gW.last,
+           last.ts - first.ts >= 15 * 60 {
+            let end = max(lo + Int(epochS), now)
+            let segs = stageSession(start: lo, end: end, grav: gW, hr: hrW, rr: [], resp: [])
+            if let s = segs.last?.stage { return s }
+        }
+        return currentStageFromHR(hrW, gravity: gW)
+    }
+
+    /// Conservative HR (+ optional gravity-motion) classifier for a short window.
+    /// Deep = low, stable HR. Wake = moving or elevated HR. REM = higher variance.
+    /// Everything else in the sleep band is light — the class smart-wake waits for.
+    static func currentStageFromHR(_ hr: [HRSample], gravity: [GravitySample]) -> String {
+        if gravity.count >= 3 {
+            let d = gravityDeltas(gravity)
+            let recent = Array(d.suffix(10))
+            if !recent.isEmpty {
+                let moving = recent.filter { $0 >= moveDeltaThresholdG }.count
+                if Double(moving) / Double(recent.count) >= stageWakeMoveFrac {
+                    return "wake"
+                }
+            }
+        }
+        guard hr.count >= 8 else { return "unknown" }
+        let bpms = hr.map { Double($0.bpm) }.sorted()
+        let median = bpms[bpms.count / 2]
+        let tail = Array(hr.suffix(max(5, hr.count / 6))).map { Double($0.bpm) }
+        let cur = tail.reduce(0, +) / Double(tail.count)
+        let mean = bpms.reduce(0, +) / Double(bpms.count)
+        let sd = standardDeviation(bpms)
+        _ = mean
+        if cur > max(70.0, median * 1.12) { return "wake" }
+        let p25 = bpms[max(0, bpms.count / 4)]
+        if cur <= p25 && sd < 3.5 { return "deep" }
+        if sd >= 6 && cur >= median { return "rem" }
+        return "light"
+    }
+
     // MARK: - Small stats helpers
 
     /// Population standard deviation (numpy default, ddof=0).

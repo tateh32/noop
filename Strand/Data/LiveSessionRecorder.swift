@@ -26,6 +26,8 @@ final class LiveSessionRecorder: ObservableObject {
     /// Fired when a session stops (saved or discarded) so the owner can shut the
     /// heavy realtime BLE stream back down.
     var onSessionEnded: (() -> Void)?
+    /// Fired after a durable save so the owner can write the row to HealthKit.
+    var onWorkoutSaved: ((WorkoutRow) -> Void)?
 
     /// 8 hours at ~1 Hz. Bounds both memory and the calorie series.
     static let maxHrTicks = 8 * 3600
@@ -105,6 +107,10 @@ final class LiveSessionRecorder: ObservableObject {
         startTicker()
         startSensors()
         persist()
+        #if os(iOS)
+        LiveActivityController.start(sport: sport, startedAt: startedAt ?? Date(),
+                                      bpm: lastBpm, elapsedS: elapsedS)
+        #endif
     }
 
     /// Resume a session after jetsam / process death. Returns true if one was running.
@@ -148,6 +154,10 @@ final class LiveSessionRecorder: ObservableObject {
         refreshElapsed()
         startTicker()
         startSensors()
+        #if os(iOS)
+        LiveActivityController.start(sport: sport, startedAt: startedAt ?? Date(),
+                                      bpm: lastBpm, elapsedS: elapsedS)
+        #endif
         return true
     }
 
@@ -195,6 +205,9 @@ final class LiveSessionRecorder: ObservableObject {
         avgHr = Int((Double(hrSum) / Double(hrTicks.count)).rounded())
         maxHr = max(maxHr ?? bpm, bpm)
         persistThrottled()
+        #if os(iOS)
+        LiveActivityController.update(elapsedS: elapsedS, bpm: lastBpm, sport: sport)
+        #endif
     }
 
     func discard() {
@@ -203,6 +216,9 @@ final class LiveSessionRecorder: ObservableObject {
         running = false
         hrProvider = nil
         gpsNote = ""
+        #if os(iOS)
+        LiveActivityController.end()
+        #endif
         onSessionEnded?()
     }
 
@@ -238,6 +254,12 @@ final class LiveSessionRecorder: ObservableObject {
         // write (store busy, disk pressure) lost the workout with no way to retry,
         // even though the UI offered "Stop and save again".
         let saved = await repo.logWorkout(row)
+        if saved {
+            #if os(iOS)
+            LiveActivityController.end()
+            #endif
+            onWorkoutSaved?(row)
+        }
         guard saved else {
             // Keep the session fully alive for the retry — the ticker alone would
             // leave distance and steps frozen while the clock kept moving.
@@ -249,6 +271,9 @@ final class LiveSessionRecorder: ObservableObject {
         hrProvider = nil
         gpsNote = ""
         LiveSessionSnapshot.clear()
+        #if os(iOS)
+        LiveActivityController.end()
+        #endif
         onSessionEnded?()
         return true
     }

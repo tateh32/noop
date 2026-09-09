@@ -10,6 +10,7 @@ struct StrandApp: App {
             ContentView()
                 .environmentObject(model)
                 .environmentObject(model.live)
+                .environmentObject(model.live.offload)
                 .environmentObject(model.repo)
                 .environmentObject(model.profile)
                 .environmentObject(model.behavior)

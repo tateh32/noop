@@ -75,6 +75,9 @@ public final class BLEManager: NSObject, ObservableObject {
     private var lastDataAt = Date()
     /// True while the Live screen wants the (heavy) realtime stream; keep-alive re-arms it.
     private var wantsRealtime = false
+    /// iOS smart-wake: keep realtime armed in the light-sleep window so live
+    /// staging has HR/gravity. Independent of the Live screen / workout flag.
+    private var wantsSmartWake = false
     /// Last-offload-attempt time (unix seconds), persisted so the rate limiter survives relaunch
     /// (matches WHOOP's DATA_SYNC_WORKER_LAST_WORK_TIME watermark).
     static let backfillLastAtKey = "backfillLastAt"
@@ -129,6 +132,7 @@ public final class BLEManager: NSObject, ObservableObject {
         self.collector = nil
         super.init()
         state.lastSyncedAt = UserDefaults.standard.object(forKey: "lastSyncedAt") as? Double
+        state.offload.lastSyncedAt = state.lastSyncedAt
         central = Self.makeCentral(delegate: self)
         // Strap-as-clock: an incoming EVENT packet kicks a rate-limited catch-up sync.
         router.onSyncTrigger = { [weak self] in self?.requestSync(.strap) }
@@ -176,6 +180,7 @@ public final class BLEManager: NSObject, ObservableObject {
         self.collector = collector
         super.init()
         state.lastSyncedAt = UserDefaults.standard.object(forKey: "lastSyncedAt") as? Double
+        state.offload.lastSyncedAt = state.lastSyncedAt
         central = Self.makeCentral(delegate: self)
         // Strap-as-clock: an incoming EVENT packet kicks a rate-limited catch-up sync.
         router.onSyncTrigger = { [weak self] in self?.requestSync(.strap) }
@@ -387,6 +392,7 @@ public final class BLEManager: NSObject, ObservableObject {
         if reason == "HISTORY_COMPLETE" {
             state.lastSyncedAt = Date().timeIntervalSince1970
             UserDefaults.standard.set(state.lastSyncedAt, forKey: "lastSyncedAt")
+            state.offload.noteSynced(at: state.lastSyncedAt ?? 0)
             onHistoricalSyncComplete?()
         }
         checkStrapLiveness()         // safety-net: strap ahead of us AND our frontier frozen ⇒ stuck?
@@ -406,6 +412,7 @@ public final class BLEManager: NSObject, ObservableObject {
                                               ourFrontierTs: front,
                                               now: now)
             state.strapNeedsReboot = stuck
+            state.offload.noteRange(strapNewest: strapNewest, frontier: front)
             if stuck {
                 log("Watchdog: behind + frontier frozen — recovery (exit high-freq + SET_CLOCK)")
                 send(.exitHighFreqSync, payload: [0x00])
@@ -429,7 +436,24 @@ public final class BLEManager: NSObject, ObservableObject {
     /// Enable the heavy realtime stream (type-40/43) and remember we want it re-armed by keep-alive.
     public func startRealtime() { wantsRealtime = true; send(.toggleRealtimeHR, payload: [0x01]) }
     /// Stop the realtime stream. The lightweight 0x2A37 HR keeps recording continuously regardless.
-    public func stopRealtime() { wantsRealtime = false; send(.toggleRealtimeHR, payload: [0x00]) }
+    public func stopRealtime() {
+        wantsRealtime = false
+        if !wantsSmartWake { send(.toggleRealtimeHR, payload: [0x00]) }
+    }
+
+    /// iOS only: keep the heavy stream alive during the smart-wake window. No-op on Mac —
+    /// the Mac is not the overnight companion, and we do not claim early fire while asleep.
+    func setSmartWakeMonitoring(_ on: Bool) {
+        wantsSmartWake = on
+        #if os(iOS)
+        guard state.bonded, !backfilling else { return }
+        if on {
+            send(.toggleRealtimeHR, payload: [0x01])
+        } else if !wantsRealtime {
+            send(.toggleRealtimeHR, payload: [0x00])
+        }
+        #endif
+    }
 
     private func startKeepAlive() {
         keepAliveTimer?.cancel()
@@ -451,7 +475,11 @@ public final class BLEManager: NSObject, ObservableObject {
             return
         }
         guard !backfilling else { return }            // never poke the strap mid-offload
+        #if os(iOS)
+        if wantsRealtime || wantsSmartWake { send(.toggleRealtimeHR, payload: [0x01]) }
+        #else
         if wantsRealtime { send(.toggleRealtimeHR, payload: [0x01]) }   // re-arm so it can't lapse
+        #endif
         keepAliveTick += 1
         if keepAliveTick % 2 == 0 { send(.getBatteryLevel, payload: []) }  // ~every 60s
     }
@@ -630,6 +658,7 @@ extension BLEManager: CBCentralManagerDelegate {
         didBond = false
         clockRequested = false
         connectHandshakeDone = false
+        wantsSmartWake = false
         // Reset backfill state so the next connect starts a fresh offload.
         backfillStarted = false
         backfilling = false
@@ -875,6 +904,8 @@ extension BLEManager: CBPeripheralDelegate {
                 if frame.count > 6, frame[6] == WhoopCommand.getDataRange.rawValue,
                    let newest = BLEManager.dataRangeNewestUnix(from: frame) {
                     strapNewestTs = newest                        // feeds the liveness watchdog
+                    state.offload.noteRange(strapNewest: newest,
+                                             frontier: state.offload.frontierTs)
                 }
                 // Clock correlation runs in both live and backfill modes. Once established it
                 // unblocks both the Collector (live path) and the Backfiller (chunk decoding).

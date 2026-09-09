@@ -197,4 +197,27 @@ final class SleepStagerTests: XCTestCase {
         XCTAssertTrue(rate.isNaN)
         XCTAssertTrue(rrv.isNaN)
     }
+
+    // MARK: - Live current stage (smart wake)
+
+    func testCurrentStageUnknownWhenTooThin() {
+        XCTAssertEqual(SleepStager.currentStage(now: 100, hr: [], gravity: []), "unknown")
+        let hr = (0..<4).map { HRSample(ts: 100 + $0, bpm: 55) }
+        XCTAssertEqual(SleepStager.currentStage(now: 110, hr: hr, gravity: []), "unknown")
+    }
+
+    func testCurrentStageDeepFromStableLowHR() {
+        let now = 5_000_000
+        let hr = (0..<90).map { HRSample(ts: now - 90 + $0, bpm: 48) }
+        XCTAssertEqual(SleepStager.currentStage(now: now, hr: hr, gravity: []), "deep")
+    }
+
+    func testCurrentStageWakeFromMovingGravity() {
+        let now = 6_000_000
+        let hr = (0..<60).map { HRSample(ts: now - 60 + $0, bpm: 55) }
+        let grav = (0..<60).map { i -> GravitySample in
+            GravitySample(ts: now - 60 + i, x: Double(i % 2) * 0.4, y: 0, z: 1)
+        }
+        XCTAssertEqual(SleepStager.currentStage(now: now, hr: hr, gravity: grav), "wake")
+    }
 }

@@ -120,8 +120,11 @@ final class Repository: ObservableObject {
         let compSleep = (try? await store.sleepSessions(deviceId: computedDeviceId, from: lo, to: hi,
                                                         limit: sleepLimit, newestFirst: true)) ?? []
 
+        let appleSleep = (try? await store.sleepSessions(deviceId: "apple-health", from: lo, to: hi,
+                                                        limit: sleepLimit, newestFirst: true)) ?? []
+
         self.days = Self.mergeDaily(imported: imported, computed: computed)
-        self.sleeps = Self.mergeSleep(imported: impSleep, computed: compSleep)
+        self.sleeps = Self.mergeSleep(imported: impSleep, computed: compSleep, apple: appleSleep)
         self.loaded = true
     }
 
@@ -134,12 +137,15 @@ final class Repository: ObservableObject {
     }
 
     /// Same precedence for sleep sessions, keyed by the day the night ends on.
-    private static func mergeSleep(imported: [CachedSleepSession], computed: [CachedSleepSession]) -> [CachedSleepSession] {
+    /// Computed < Apple Health < WHOOP import.
+    private static func mergeSleep(imported: [CachedSleepSession], computed: [CachedSleepSession],
+                                   apple: [CachedSleepSession] = []) -> [CachedSleepSession] {
         func endDay(_ s: CachedSleepSession) -> String {
             dayString(Date(timeIntervalSince1970: TimeInterval(s.endTs)))
         }
         var byDay: [String: CachedSleepSession] = [:]
         for s in computed { byDay[endDay(s)] = s }
+        for s in apple { byDay[endDay(s)] = s }
         for s in imported { byDay[endDay(s)] = s }
         return byDay.values.sorted { $0.startTs < $1.startTs }
     }
@@ -154,6 +160,11 @@ final class Repository: ObservableObject {
     func hrSamples(from: Int, to: Int, limit: Int = 8000) async -> [HRSample] {
         guard let store = await ensureStore() else { return [] }
         return (try? await store.hrSamples(deviceId: deviceId, from: from, to: to, limit: limit)) ?? []
+    }
+
+    func gravitySamples(from: Int, to: Int, limit: Int = 4000) async -> [GravitySample] {
+        guard let store = await ensureStore() else { return [] }
+        return (try? await store.gravitySamples(deviceId: deviceId, from: from, to: to, limit: limit)) ?? []
     }
 
     func sleepSessions(from: Int, to: Int, limit: Int = 100) async -> [CachedSleepSession] {

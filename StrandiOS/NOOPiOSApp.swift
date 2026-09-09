@@ -9,11 +9,13 @@ struct NOOPiOSApp: App {
             ContentView()
                 .environmentObject(model)
                 .environmentObject(model.live)
+                .environmentObject(model.live.offload)
                 .environmentObject(model.repo)
                 .environmentObject(model.profile)
                 .environmentObject(model.behavior)
                 .environmentObject(model.intelligence)
                 .environmentObject(model.coach)
+                .environmentObject(model.healthKit)
                 .preferredColorScheme(.dark)
         }
     }

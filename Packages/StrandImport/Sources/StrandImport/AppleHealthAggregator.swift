@@ -147,7 +147,7 @@ public enum AppleHealthAggregator {
     /// `yyyy-MM-dd` for a UTC `Date` shifted into its own local offset.
     /// We add the offset to the UTC instant and read the calendar fields in
     /// UTC, which yields the civil (wall-clock) date the sample was recorded on.
-    static func localDay(_ utc: Date, tzOffsetMin: Int) -> String {
+    public static func localDay(_ utc: Date, tzOffsetMin: Int) -> String {
         let shifted = utc.addingTimeInterval(TimeInterval(tzOffsetMin * 60))
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "UTC")!

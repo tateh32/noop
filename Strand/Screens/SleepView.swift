@@ -52,6 +52,7 @@ struct SleepView: View {
                         // desk automations. Its own view so a settings change does
                         // not rebuild the charts above.
                         SmartAlarmCard()
+                        BedtimeNudgeBanner(days: repo.days)
                         metricGrid(resolved)
                         stagesVsTypical(resolved)
                         durationTrend(resolved)
@@ -60,6 +61,7 @@ struct SleepView: View {
                     VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                         emptyState
                         SmartAlarmCard()
+                        BedtimeNudgeBanner(days: repo.days)
                     }
                 }
             }
@@ -635,6 +637,21 @@ struct SleepView: View {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+}
+
+/// Quiet bedtime line. Observes BehaviorStore (wake time), not AppModel.
+private struct BedtimeNudgeBanner: View {
+    @EnvironmentObject private var behavior: BehaviorStore
+    let days: [DailyMetric]
+
+    var body: some View {
+        Text(BedtimeNudge.line(now: Date(), wakeMinutes: behavior.smartAlarmMinutes, days: days))
+            .font(StrandFont.footnote)
+            .foregroundStyle(StrandPalette.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 2)
+            .accessibilityLabel("Bedtime nudge")
+    }
 }
 
 // MARK: - Local value types

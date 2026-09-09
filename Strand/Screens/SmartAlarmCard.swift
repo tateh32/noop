@@ -14,7 +14,7 @@ struct SmartAlarmCard: View {
         SettingsSection(
             icon: "alarm.fill",
             title: "Smart alarm",
-            blurb: "Wake to a wrist buzz. This arms the strap's own firmware alarm, so it still fires if \(DeviceCopy.here) is asleep or NOOP is closed."
+            blurb: "Wake to a wrist buzz. This arms the strap's own firmware alarm, so it still fires if \(DeviceCopy.here) is asleep or NOOP is closed. Early wake on a light phase needs the phone connected overnight."
         ) {
             VStack(spacing: 0) {
                 SettingsToggleRow(label: "Enable smart alarm",
@@ -45,10 +45,7 @@ struct SmartAlarmCard: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Light-sleep window").font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
-                // Honest about scope: the firmware alarm fires at the fixed time.
-                // Waking early on a detected light phase needs live overnight
-                // staging, which is not wired up yet — do not imply that it is.
-                Text("Still building. Your alarm fires at the time above; NOOP does not yet wake you early on a light phase.")
+                Text("While \(DeviceCopy.here) stays connected, NOOP watches the last half hour and may buzz the strap early in a light phase. The strap still alarms at the time above if the phone is gone or no light phase appears.")
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }

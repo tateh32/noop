@@ -17,6 +17,33 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.4.0 — Smart wake, HealthKit, Live Activity, sleep debt, sync status
+
+iPhone-facing work on top of 1.3.9. The strap firmware alarm is still the safety net;
+the rest is phone-side.
+
+- **Smart wake is live.** In the light-sleep window, while this iPhone stays
+  connected, NOOP stages the last half hour of HR/gravity and may buzz the strap
+  early on a light phase. The firmware alarm still fires at the time you set if
+  the phone is gone or no light phase appears. Sleep's card copy says this.
+- **HealthKit two-way sync (opt-in).** Data Sources has a toggle. Reads sleep and
+  workouts live; writes NOOP sleep, workouts, HR, HRV and recovery metadata.
+  Nothing leaves the device. Enable the HealthKit capability on your Apple team.
+- **Live Activity during a Train session** — elapsed time and heart rate on the
+  Lock Screen (iOS 16.1+). Restores after a memory kill with the workout snapshot.
+- **Today sync line** — last offload, records pending, last night scored.
+- **Sleep debt bedtime** — “to clear your debt, be in bed by 22:40” (or similar)
+  on Sleep and Today.
+
+```bash
+git fetch origin cursor/workout-sleep-tracking-67db
+git checkout cursor/workout-sleep-tracking-67db
+git checkout -- StrandiOS/Resources/Info.plist
+xcodegen generate
+```
+
+Scheme **NOOPiOS**. Personal Team. Rebuild on the phone.
+
 ## 1.3.9 — Smart alarm lives on Sleep
 
 - **Smart alarm moved to Sleep**, under last night, where you actually think about

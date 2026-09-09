@@ -33,6 +33,10 @@ public final class LiveState: ObservableObject {
     /// came — i.e. caught up). Drives the sync tile + the staleness nudge.
     @Published public var lastSyncedAt: TimeInterval?
 
+    /// Last-offload / pending-records snapshot. Observed by Today’s one-line status
+    /// so that screen does not subscribe to 1 Hz `heartRate`.
+    public let offload = OffloadStatus()
+
     /// Optional hook invoked on every battery update (wired by LiveViewModel to the alert monitor).
     /// Kept as a closure so LiveState stays a plain observable snapshot with no alert dependency.
     public var onBatteryUpdate: ((Double) -> Void)?
