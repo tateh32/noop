@@ -48,11 +48,13 @@ final class HealthKitMapperTests: XCTestCase {
                                          restingHr: nil, avgHrv: nil, stagesJSON: nil)
         XCTAssertEqual(HealthKitMapper.sleepsAfter([old, fresh], endTs: 200).map(\.endTs), [400])
         let wOld = WorkoutRow(startTs: 1, endTs: 10, sport: "Running", source: "logged",
-                              durationS: 9, energyKcal: nil, avgHr: nil, maxHr: nil, strain: nil,
-                              distanceM: nil, zonesJSON: nil, notes: nil)
+                              durationS: 9, energyKcal: Double?.none, avgHr: Int?.none, maxHr: Int?.none,
+                              strain: Double?.none, distanceM: Double?.none, zonesJSON: String?.none,
+                              notes: String?.none)
         let wNew = WorkoutRow(startTs: 20, endTs: 50, sport: "Running", source: "logged",
-                              durationS: 30, energyKcal: nil, avgHr: nil, maxHr: nil, strain: nil,
-                              distanceM: nil, zonesJSON: nil, notes: nil)
+                              durationS: 30, energyKcal: Double?.none, avgHr: Int?.none, maxHr: Int?.none,
+                              strain: Double?.none, distanceM: Double?.none, zonesJSON: String?.none,
+                              notes: String?.none)
         XCTAssertEqual(HealthKitMapper.workoutsAfter([wOld, wNew], endTs: 10).map(\.endTs), [50])
         let dOld = DailyMetric(day: "2026-09-07", totalSleepMin: 450, efficiency: nil,
                                deepMin: nil, remMin: nil, lightMin: nil, disturbances: nil,
