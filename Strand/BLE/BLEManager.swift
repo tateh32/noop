@@ -624,6 +624,9 @@ extension BLEManager: CBCentralManagerDelegate {
                                error: Error?) {
         Task { @MainActor in await collector?.flush() }
         state.connected = false
+        // `bonded` was only ever set true, so the UI kept claiming "Bonded" after a
+        // drop and any bonded-edge subscriber never re-fired on reconnect.
+        state.bonded = false
         didBond = false
         clockRequested = false
         connectHandshakeDone = false

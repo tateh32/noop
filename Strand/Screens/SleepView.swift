@@ -48,12 +48,19 @@ struct SleepView: View {
                 if let resolved {
                     VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                         hero(resolved)
+                        // Smart alarm sits with last night's wake time, not under
+                        // desk automations. Its own view so a settings change does
+                        // not rebuild the charts above.
+                        SmartAlarmCard()
                         metricGrid(resolved)
                         stagesVsTypical(resolved)
                         durationTrend(resolved)
                     }
                 } else {
-                    emptyState
+                    VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                        emptyState
+                        SmartAlarmCard()
+                    }
                 }
             }
             // Persist the freshly-built model so subsequent renders with the same inputs hit
@@ -613,27 +620,18 @@ struct SleepView: View {
 
     // MARK: - Stage decoding
 
-    /// Decode the imported stagesJSON dict of MINUTES {"light","deep","rem","awake"}.
+    /// Decode stagesJSON in either producer's shape. See `SleepStageBreakdown`.
     private func decodeStages(_ json: String?) -> Stages? {
-        guard let json, let data = json.data(using: .utf8) else { return nil }
-        guard let obj = try? JSONSerialization.jsonObject(with: data),
-              let dict = obj as? [String: Any] else { return nil }
-        func val(_ key: String) -> Double {
-            if let n = dict[key] as? NSNumber { return n.doubleValue }
-            if let d = dict[key] as? Double { return d }
-            if let i = dict[key] as? Int { return Double(i) }
-            return 0
-        }
-        let s = Stages(awake: val("awake"), light: val("light"),
-                       deep: val("deep"), rem: val("rem"))
-        return s.total > 0 ? s : nil
+        SleepStageBreakdown.decode(json)
     }
 
-    /// yyyy-MM-dd → Date (en_US_POSIX, UTC), per task spec.
+    /// yyyy-MM-dd → Date. `day` columns are civil dates in the user's calendar
+    /// (import cycle day / local wake day), so parse them locally — a UTC parser
+    /// shifted every trend point by a day for anyone west of Greenwich.
     private static let dayParser: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "UTC")
+        f.timeZone = .current
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
@@ -684,16 +682,7 @@ private struct SleepModel {
     let trendPoints: [TrendPoint]
 }
 
-private struct Stages {
-    var awake: Double
-    var light: Double
-    var deep: Double
-    var rem: Double
-    /// All stages (includes awake) — total time-in-bed minutes.
-    var total: Double { awake + light + deep + rem }
-    /// Asleep time = total minus awake.
-    var asleep: Double { light + deep + rem }
-}
+private typealias Stages = SleepStageBreakdown
 
 private struct Night {
     let session: CachedSleepSession
@@ -744,6 +733,7 @@ private struct Night {
 #Preview("Sleep") {
     SleepView()
         .environmentObject(Repository.previewSleep())
+        .environmentObject(BehaviorStore())
         .frame(width: 980, height: 1180)
         .preferredColorScheme(.dark)
 }

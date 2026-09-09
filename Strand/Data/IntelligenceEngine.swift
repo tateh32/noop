@@ -19,6 +19,9 @@ final class IntelligenceEngine: ObservableObject {
     @Published var computing = false
     @Published var note: String?
 
+    /// The in-flight scoring pass, if any. See `analyzeRecent`.
+    private var analyzeTask: Task<Void, Never>?
+
     struct Computed: Identifiable {
         let day: String
         let recovery: Double?
@@ -39,7 +42,22 @@ final class IntelligenceEngine: ObservableObject {
     ///
     /// Heavy sleep-staging runs off the main actor. On iPhone we score fewer nights and cap the
     /// per-stream sample count so a 14-day BLE offload cannot jetsam the process.
+    /// Serializes callers. Four independent triggers exist (launch loop, foreground,
+    /// offload-complete, the Intelligence screen); without this they ran overlapping
+    /// passes, each holding several nights of 1 Hz streams — enough to get the app
+    /// killed on an iPhone. A caller that arrives mid-pass awaits the in-flight one.
     func analyzeRecent(maxDays: Int = PhoneBudget.intelligenceDays) async {
+        if let inFlight = analyzeTask {
+            await inFlight.value
+            return
+        }
+        let task = Task { await analyzeRecentImpl(maxDays: maxDays) }
+        analyzeTask = task
+        await task.value
+        analyzeTask = nil
+    }
+
+    private func analyzeRecentImpl(maxDays: Int) async {
         guard let store = await repo.storeHandle() else { note = "No on-device store yet."; return }
         guard let hrvCfg = Baselines.metricCfg["hrv"],
               let rhrCfg = Baselines.metricCfg["resting_hr"] else { return }
@@ -71,11 +89,12 @@ final class IntelligenceEngine: ObservableObject {
             ? IntelligenceSkip.scoredDays(in: hist) : []
 
         let wakeStarts = NightSampleWindow.wakeDayStarts(count: maxDays)
-        for wakeStart in wakeStarts {
+        for (offset, wakeStart) in wakeStarts.enumerated() {
             let day = NightSampleWindow.dayString(wakeStart)
             let utcDay = AnalyticsEngine.dayString(Int(wakeStart.timeIntervalSince1970) + 12 * 3_600)
             if PhoneBudget.skipScoringWhenImported {
-                if IntelligenceSkip.shouldSkip(utcDay: utcDay, localDay: day, scored: alreadyScored) {
+                if IntelligenceSkip.shouldSkip(utcDay: utcDay, localDay: day,
+                                               scored: alreadyScored, dayOffset: offset) {
                     continue
                 }
             }
@@ -162,11 +181,18 @@ final class IntelligenceEngine: ObservableObject {
 /// Pure helpers so a WHOOP import does not re-score nights the CSV already filled,
 /// while nights the import did not cover (new strap data) still get scored.
 enum IntelligenceSkip {
+    /// The newest nights are always rescored. A pass can run before the strap has
+    /// finished offloading, scoring last night from partial data; without this the
+    /// day would count as "done" forever and never converge once the rest arrives.
+    static let alwaysRescoreDays = 2
+
     static func scoredDays(in days: [DailyMetric]) -> Set<String> {
         Set(days.compactMap { $0.recovery != nil ? $0.day : nil })
     }
 
-    static func shouldSkip(utcDay: String, localDay: String, scored: Set<String>) -> Bool {
-        scored.contains(utcDay) || scored.contains(localDay)
+    static func shouldSkip(utcDay: String, localDay: String, scored: Set<String>,
+                           dayOffset: Int) -> Bool {
+        guard dayOffset >= alwaysRescoreDays else { return false }
+        return scored.contains(utcDay) || scored.contains(localDay)
     }
 }

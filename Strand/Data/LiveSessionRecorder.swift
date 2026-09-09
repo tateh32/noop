@@ -23,11 +23,20 @@ final class LiveSessionRecorder: ObservableObject {
     @Published private(set) var gpsNote: String = ""
     @Published var error: String?
 
+    /// Fired when a session stops (saved or discarded) so the owner can shut the
+    /// heavy realtime BLE stream back down.
+    var onSessionEnded: (() -> Void)?
+
+    /// 8 hours at ~1 Hz. Bounds both memory and the calorie series.
+    static let maxHrTicks = 8 * 3600
+    /// Snapshot cadence. Only aggregates are written, so this is cheap.
+    static let persistIntervalS: TimeInterval = 15
+
     private var startedAt: Date?
     private var hrTicks: [Int] = []
+    private var hrSum = 0
     private var lastLat: Double?
     private var lastLon: Double?
-    private var timer: AnyCancellable?
     private var tickTimer: DispatchSourceTimer?
     private var lastPersistAt: TimeInterval = 0
     private var lastHrTickAt: TimeInterval = 0
@@ -81,6 +90,7 @@ final class LiveSessionRecorder: ObservableObject {
         avgHr = nil
         maxHr = nil
         hrTicks = []
+        hrSum = 0
         lastLat = nil
         lastLon = nil
         lastHrTickAt = 0
@@ -115,7 +125,10 @@ final class LiveSessionRecorder: ObservableObject {
     /// Resume a session after jetsam / process death. Returns true if one was running.
     @discardableResult
     func restoreIfNeeded(hr: @escaping () -> Int?, profile: ProfileStore) -> Bool {
-        guard !running, let snap = LiveSessionSnapshot.load(), snap.isFresh else {
+        // Never clear the snapshot while a session is live — that would destroy the
+        // crash-recovery record for the workout currently running.
+        guard !running else { return false }
+        guard let snap = LiveSessionSnapshot.load(), snap.isFresh else {
             LiveSessionSnapshot.clear()
             return false
         }
@@ -127,10 +140,19 @@ final class LiveSessionRecorder: ObservableObject {
         startedAt = Date(timeIntervalSince1970: snap.startedAt)
         distanceM = snap.distanceM
         steps = snap.steps
-        hrTicks = snap.hrTicks
-        lastBpm = hrTicks.last
-        avgHr = hrTicks.isEmpty ? nil : Int((Double(hrTicks.reduce(0, +)) / Double(hrTicks.count)).rounded())
-        maxHr = hrTicks.max()
+        // The snapshot stores HR aggregates, not every beat. Rebuild a flat series
+        // at the mean so calories stay in the right ballpark after a resume.
+        if snap.hrCount > 0 {
+            let mean = Int((Double(snap.hrSum) / Double(snap.hrCount)).rounded())
+            hrTicks = Array(repeating: mean, count: min(snap.hrCount, Self.maxHrTicks))
+            hrSum = hrTicks.reduce(0, +)
+            avgHr = mean
+            lastBpm = mean
+        } else {
+            hrTicks = []
+            hrSum = 0
+        }
+        maxHr = snap.hrMax
         error = nil
         #if os(iOS)
         gpsNote = usesGPS ? "GPS resuming…" : "GPS off for this sport"
@@ -159,7 +181,9 @@ final class LiveSessionRecorder: ObservableObject {
     }
 
     /// Called from AppModel on every strap HR sample so a backgrounded workout
-    /// still records beats when the 1 Hz RunLoop timer is frozen.
+    /// still records beats when the 1 Hz timer is frozen. Aggregates are kept
+    /// running (O(1)) — a `reduce`/`max` over the whole series on every beat cost
+    /// ~29k operations per second by the end of a long session.
     func noteHR(_ bpm: Int?) {
         guard running else { return }
         refreshElapsed()
@@ -170,9 +194,14 @@ final class LiveSessionRecorder: ObservableObject {
         guard now - lastHrTickAt >= 0.8 else { return }
         lastHrTickAt = now
         hrTicks.append(bpm)
-        if hrTicks.count > 8 * 3600 { hrTicks.removeFirst(hrTicks.count - 8 * 3600) }
-        avgHr = Int((Double(hrTicks.reduce(0, +)) / Double(hrTicks.count)).rounded())
-        maxHr = hrTicks.max()
+        hrSum += bpm
+        if hrTicks.count > Self.maxHrTicks {
+            let drop = hrTicks.count - Self.maxHrTicks
+            hrSum -= hrTicks.prefix(drop).reduce(0, +)
+            hrTicks.removeFirst(drop)
+        }
+        avgHr = Int((Double(hrSum) / Double(hrTicks.count)).rounded())
+        maxHr = max(maxHr ?? bpm, bpm)
         persistThrottled()
     }
 
@@ -182,6 +211,7 @@ final class LiveSessionRecorder: ObservableObject {
         running = false
         hrProvider = nil
         gpsNote = ""
+        onSessionEnded?()
     }
 
     func save(into repo: Repository) async -> Bool {
@@ -189,8 +219,8 @@ final class LiveSessionRecorder: ObservableObject {
         tearDownSensors()
         let end = Date()
         let duration = max(1, end.timeIntervalSince(start))
-        let meanHR: Int? = hrTicks.isEmpty ? nil : Int((Double(hrTicks.reduce(0, +)) / Double(hrTicks.count)).rounded())
-        let peakHR = hrTicks.max()
+        let meanHR: Int? = hrTicks.isEmpty ? nil : Int((Double(hrSum) / Double(hrTicks.count)).rounded())
+        let peakHR = maxHr
         var kcal: Double? = nil
         if let profile = kcalProfile, !hrTicks.isEmpty {
             let samples: [HRSample] = hrTicks.enumerated().map { i, bpm in
@@ -212,16 +242,23 @@ final class LiveSessionRecorder: ObservableObject {
             durationS: duration, energyKcal: kcal, avgHr: meanHR, maxHr: peakHR,
             strain: Double?.none, distanceM: dist, zonesJSON: String?.none,
             notes: noteBits.joined(separator: " · "))
+        // Do not tear down until the row is durable. Clearing first meant a failed
+        // write (store busy, disk pressure) lost the workout with no way to retry,
+        // even though the UI offered "Stop and save again".
+        let saved = await repo.logWorkout(row)
+        guard saved else {
+            startTicker()   // keep the session alive so the retry has something to save
+            return false
+        }
         running = false
         hrProvider = nil
         gpsNote = ""
         LiveSessionSnapshot.clear()
-        return await repo.logWorkout(row)
+        onSessionEnded?()
+        return true
     }
 
     private func startTicker() {
-        timer?.cancel()
-        timer = nil
         tickTimer?.cancel()
         let t = DispatchSource.makeTimerSource(queue: .main)
         t.schedule(deadline: .now(), repeating: 1.0)
@@ -244,13 +281,14 @@ final class LiveSessionRecorder: ObservableObject {
     func persist() {
         guard running, let start = startedAt else { return }
         LiveSessionSnapshot(sport: sport, startedAt: start.timeIntervalSince1970,
-                            distanceM: distanceM, steps: steps, hrTicks: hrTicks).save()
+                            distanceM: distanceM, steps: steps,
+                            hrSum: hrSum, hrCount: hrTicks.count, hrMax: maxHr).save()
         lastPersistAt = Date().timeIntervalSince1970
     }
 
     private func persistThrottled() {
         let now = Date().timeIntervalSince1970
-        guard now - lastPersistAt >= 15 else { return }
+        guard now - lastPersistAt >= Self.persistIntervalS else { return }
         persist()
     }
 
@@ -271,8 +309,6 @@ final class LiveSessionRecorder: ObservableObject {
     }
 
     private func tearDownSensors() {
-        timer?.cancel()
-        timer = nil
         tickTimer?.cancel()
         tickTimer = nil
         #if os(iOS)
@@ -283,12 +319,18 @@ final class LiveSessionRecorder: ObservableObject {
 }
 
 /// On-disk in-progress workout. Survives iOS jetsam so "it just stopped" can resume.
+///
+/// Stores HR *aggregates*, not the whole beat series: this is rewritten every 15
+/// seconds while a workout runs, and encoding a series that grows to ~29k entries
+/// (~115 KB of JSON) on the main thread was a needless hitch every 15 s.
 struct LiveSessionSnapshot: Codable, Equatable {
     var sport: String
     var startedAt: TimeInterval
     var distanceM: Double
     var steps: Int
-    var hrTicks: [Int]
+    var hrSum: Int
+    var hrCount: Int
+    var hrMax: Int?
 
     static let defaultsKey = "noop.liveSession.v1"
     static let maxAge: TimeInterval = 12 * 3600
@@ -325,7 +367,6 @@ private final class SessionGPS: NSObject, CLLocationManagerDelegate {
     var onDenied: (() -> Void)?
     private let manager = CLLocationManager()
     private var started = false
-    private var askedAlways = false
 
     override init() {
         super.init()
@@ -342,11 +383,8 @@ private final class SessionGPS: NSObject, CLLocationManagerDelegate {
         switch manager.authorizationStatus {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
-        case .authorizedAlways:
+        case .authorizedAlways, .authorizedWhenInUse:
             startUpdates()
-        case .authorizedWhenInUse:
-            startUpdates()
-            requestAlwaysOnce()
         default:
             onDenied?()
         }
@@ -358,25 +396,25 @@ private final class SessionGPS: NSObject, CLLocationManagerDelegate {
         manager.allowsBackgroundLocationUpdates = false
     }
 
+    /// "While Using the App" is enough to keep a locked-screen workout tracking:
+    /// the `location` background mode plus the blue status indicator is the
+    /// standard fitness pattern, so we do not nag for Always. Setting
+    /// `allowsBackgroundLocationUpdates` without authorization throws, hence the guard.
     private func startUpdates() {
+        let status = manager.authorizationStatus
+        guard status == .authorizedAlways || status == .authorizedWhenInUse else {
+            onDenied?()
+            return
+        }
         manager.allowsBackgroundLocationUpdates = true
         manager.startUpdatingLocation()
-    }
-
-    private func requestAlwaysOnce() {
-        guard !askedAlways else { return }
-        askedAlways = true
-        manager.requestAlwaysAuthorization()
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         guard started else { return }
         switch manager.authorizationStatus {
-        case .authorizedAlways:
+        case .authorizedAlways, .authorizedWhenInUse:
             startUpdates()
-        case .authorizedWhenInUse:
-            startUpdates()
-            requestAlwaysOnce()
         case .notDetermined:
             break
         default:

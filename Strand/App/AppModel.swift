@@ -104,6 +104,23 @@ final class AppModel: ObservableObject {
             }
         }
 
+        // A finished workout must release the heavy realtime stream, or keep-alive
+        // re-arms it every 30s forever and the strap keeps flooding frames.
+        session.onSessionEnded = { [weak self] in self?.stopRealtimeHR() }
+
+        // Arm the strap alarm from the settings themselves, so every surface that
+        // edits them (now the Sleep screen) stays in sync — including the window,
+        // which the old per-view onChange forgot.
+        behavior.$smartAlarmEnabled.dropFirst().sink { [weak self] _ in
+            self?.applySmartAlarm()
+        }.store(in: &hrCancellables)
+        behavior.$smartAlarmMinutes.dropFirst().sink { [weak self] _ in
+            self?.applySmartAlarm()
+        }.store(in: &hrCancellables)
+        behavior.$smartAlarmWindow.dropFirst().sink { [weak self] _ in
+            self?.applySmartAlarm()
+        }.store(in: &hrCancellables)
+
         if session.restoreIfNeeded(hr: { [weak self] in self?.bpm }, profile: profile),
            live.bonded {
             startRealtimeHR()
@@ -150,8 +167,11 @@ final class AppModel: ObservableObject {
         hrWindow.removeAll { now.timeIntervalSince($0.t) > 10 }   // ~10s window
         if hrWindow.count > 40 { hrWindow.removeFirst(hrWindow.count - 40) }
         let vals = hrWindow.map(\.v).sorted()
-        bpm = vals.isEmpty ? nil : Int(vals[vals.count / 2].rounded())
-        if session.running { session.noteHR(bpm) }
+        // Publish only on a real change. `bpm` sits on the root observable, so an
+        // identical value still invalidated every observing view about once a second.
+        let next = vals.isEmpty ? nil : Int(vals[vals.count / 2].rounded())
+        if next != bpm { bpm = next }
+        if session.running { session.noteHR(next) }
         evaluateStress()
     }
 
