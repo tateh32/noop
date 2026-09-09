@@ -139,6 +139,7 @@ private struct iPhoneRoot: View {
         case today, sleep, trends, train, more
     }
 
+    @EnvironmentObject private var model: AppModel
     @Environment(\.noopAppearance) private var appearance
     @AppStorage("noop.openedTrainTab") private var openedTrainTab = false
     @State private var tab: Tab = .today
@@ -173,7 +174,9 @@ private struct iPhoneRoot: View {
             .tag(Tab.trends)
 
             NavigationStack {
-                if tab == .train { LiveSessionView() } else { Color.clear }
+                // Keep Train mounted during a live workout so SwiftUI does not
+                // tear down the session chrome when the user checks Today.
+                if tab == .train || model.session.running { LiveSessionView() } else { Color.clear }
             }
             .tabItem {
                 Label("Train", systemImage: "figure.run")

@@ -28,6 +28,9 @@ final class LiveSessionRecorder: ObservableObject {
     private var lastLat: Double?
     private var lastLon: Double?
     private var timer: AnyCancellable?
+    private var tickTimer: DispatchSourceTimer?
+    private var lastPersistAt: TimeInterval = 0
+    private var lastHrTickAt: TimeInterval = 0
     private var hrProvider: (() -> Int?)?
     private var kcalProfile: UserProfile?
     private var hrMax: Double?
@@ -80,6 +83,8 @@ final class LiveSessionRecorder: ObservableObject {
         hrTicks = []
         lastLat = nil
         lastLon = nil
+        lastHrTickAt = 0
+        lastPersistAt = 0
         error = nil
         #if os(iOS)
         gpsNote = usesGPS ? "GPS seeking…" : "GPS off for this sport"
@@ -87,10 +92,8 @@ final class LiveSessionRecorder: ObservableObject {
         gpsNote = usesGPS ? "GPS is iPhone-only" : "GPS off for this sport"
         #endif
         running = true
-
-        timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in
-            self?.tick()
-        }
+        startTicker()
+        persist()
 
         #if os(iOS)
         if usesGPS {
@@ -109,8 +112,73 @@ final class LiveSessionRecorder: ObservableObject {
         #endif
     }
 
+    /// Resume a session after jetsam / process death. Returns true if one was running.
+    @discardableResult
+    func restoreIfNeeded(hr: @escaping () -> Int?, profile: ProfileStore) -> Bool {
+        guard !running, let snap = LiveSessionSnapshot.load(), snap.isFresh else {
+            LiveSessionSnapshot.clear()
+            return false
+        }
+        sport = snap.sport
+        hrProvider = hr
+        kcalProfile = UserProfile(weightKg: profile.weightKg, heightCm: profile.heightCm,
+                                  age: Double(profile.age), sex: profile.sex)
+        hrMax = Double(profile.hrMax)
+        startedAt = Date(timeIntervalSince1970: snap.startedAt)
+        distanceM = snap.distanceM
+        steps = snap.steps
+        hrTicks = snap.hrTicks
+        lastBpm = hrTicks.last
+        avgHr = hrTicks.isEmpty ? nil : Int((Double(hrTicks.reduce(0, +)) / Double(hrTicks.count)).rounded())
+        maxHr = hrTicks.max()
+        error = nil
+        #if os(iOS)
+        gpsNote = usesGPS ? "GPS resuming…" : "GPS off for this sport"
+        #else
+        gpsNote = usesGPS ? "GPS is iPhone-only" : "GPS off for this sport"
+        #endif
+        running = true
+        refreshElapsed()
+        startTicker()
+        #if os(iOS)
+        if usesGPS {
+            gps.onFix = { [weak self] lat, lon, acc in self?.ingestFix(lat: lat, lon: lon, accuracy: acc) }
+            gps.onDenied = { [weak self] in
+                self?.gpsNote = "Location off — distance unavailable. Enable it in Settings → NOOP."
+            }
+            gps.begin()
+        }
+        if usesSteps, CMPedometer.isStepCountingAvailable(), let start = startedAt {
+            pedometer.startUpdates(from: start) { [weak self] data, _ in
+                let n = data?.numberOfSteps.intValue ?? 0
+                Task { @MainActor in self?.steps = n }
+            }
+        }
+        #endif
+        return true
+    }
+
+    /// Called from AppModel on every strap HR sample so a backgrounded workout
+    /// still records beats when the 1 Hz RunLoop timer is frozen.
+    func noteHR(_ bpm: Int?) {
+        guard running else { return }
+        refreshElapsed()
+        guard let bpm, (30...220).contains(bpm) else { return }
+        lastBpm = bpm
+        let now = Date().timeIntervalSince1970
+        // BLE notify + 1 Hz ticker both call this; keep ~1 sample/s for calories.
+        guard now - lastHrTickAt >= 0.8 else { return }
+        lastHrTickAt = now
+        hrTicks.append(bpm)
+        if hrTicks.count > 8 * 3600 { hrTicks.removeFirst(hrTicks.count - 8 * 3600) }
+        avgHr = Int((Double(hrTicks.reduce(0, +)) / Double(hrTicks.count)).rounded())
+        maxHr = hrTicks.max()
+        persistThrottled()
+    }
+
     func discard() {
         tearDownSensors()
+        LiveSessionSnapshot.clear()
         running = false
         hrProvider = nil
         gpsNote = ""
@@ -147,22 +215,48 @@ final class LiveSessionRecorder: ObservableObject {
         running = false
         hrProvider = nil
         gpsNote = ""
+        LiveSessionSnapshot.clear()
         return await repo.logWorkout(row)
     }
 
+    private func startTicker() {
+        timer?.cancel()
+        timer = nil
+        tickTimer?.cancel()
+        let t = DispatchSource.makeTimerSource(queue: .main)
+        t.schedule(deadline: .now(), repeating: 1.0)
+        t.setEventHandler { [weak self] in self?.tick() }
+        t.resume()
+        tickTimer = t
+    }
+
     private func tick() {
+        guard running else { return }
+        refreshElapsed()
+        noteHR(hrProvider?())
+    }
+
+    private func refreshElapsed() {
         guard running, let start = startedAt else { return }
         elapsedS = max(0, Int(Date().timeIntervalSince(start)))
-        if let bpm = hrProvider?(), (30...220).contains(bpm) {
-            lastBpm = bpm
-            hrTicks.append(bpm)
-            avgHr = Int((Double(hrTicks.reduce(0, +)) / Double(hrTicks.count)).rounded())
-            maxHr = hrTicks.max()
-        }
+    }
+
+    func persist() {
+        guard running, let start = startedAt else { return }
+        LiveSessionSnapshot(sport: sport, startedAt: start.timeIntervalSince1970,
+                            distanceM: distanceM, steps: steps, hrTicks: hrTicks).save()
+        lastPersistAt = Date().timeIntervalSince1970
+    }
+
+    private func persistThrottled() {
+        let now = Date().timeIntervalSince1970
+        guard now - lastPersistAt >= 15 else { return }
+        persist()
     }
 
     private func ingestFix(lat: Double, lon: Double, accuracy: Double) {
         guard running, usesGPS else { return }
+        refreshElapsed()
         gpsNote = String(format: "GPS ±%.0f m", accuracy)
         if let pLat = lastLat, let pLon = lastLon {
             let delta = GeoDistance.meters(fromLat: pLat, lon: pLon, toLat: lat, lon: lon)
@@ -179,10 +273,48 @@ final class LiveSessionRecorder: ObservableObject {
     private func tearDownSensors() {
         timer?.cancel()
         timer = nil
+        tickTimer?.cancel()
+        tickTimer = nil
         #if os(iOS)
         gps.stop()
         if CMPedometer.isStepCountingAvailable() { pedometer.stopUpdates() }
         #endif
+    }
+}
+
+/// On-disk in-progress workout. Survives iOS jetsam so "it just stopped" can resume.
+struct LiveSessionSnapshot: Codable, Equatable {
+    var sport: String
+    var startedAt: TimeInterval
+    var distanceM: Double
+    var steps: Int
+    var hrTicks: [Int]
+
+    static let defaultsKey = "noop.liveSession.v1"
+    static let maxAge: TimeInterval = 12 * 3600
+
+    var isFresh: Bool {
+        let age = Date().timeIntervalSince1970 - startedAt
+        return age >= 0 && age <= Self.maxAge
+    }
+
+    func save() {
+        if let data = try? JSONEncoder().encode(self) {
+            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+        }
+    }
+
+    static func load() -> LiveSessionSnapshot? {
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return nil }
+        return try? JSONDecoder().decode(LiveSessionSnapshot.self, from: data)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: defaultsKey)
+    }
+
+    static func decode(_ data: Data) -> LiveSessionSnapshot? {
+        try? JSONDecoder().decode(LiveSessionSnapshot.self, from: data)
     }
 }
 
@@ -193,6 +325,7 @@ private final class SessionGPS: NSObject, CLLocationManagerDelegate {
     var onDenied: (() -> Void)?
     private let manager = CLLocationManager()
     private var started = false
+    private var askedAlways = false
 
     override init() {
         super.init()
@@ -209,8 +342,11 @@ private final class SessionGPS: NSObject, CLLocationManagerDelegate {
         switch manager.authorizationStatus {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
-        case .authorizedAlways, .authorizedWhenInUse:
+        case .authorizedAlways:
             startUpdates()
+        case .authorizedWhenInUse:
+            startUpdates()
+            requestAlwaysOnce()
         default:
             onDenied?()
         }
@@ -227,11 +363,20 @@ private final class SessionGPS: NSObject, CLLocationManagerDelegate {
         manager.startUpdatingLocation()
     }
 
+    private func requestAlwaysOnce() {
+        guard !askedAlways else { return }
+        askedAlways = true
+        manager.requestAlwaysAuthorization()
+    }
+
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         guard started else { return }
         switch manager.authorizationStatus {
-        case .authorizedAlways, .authorizedWhenInUse:
+        case .authorizedAlways:
             startUpdates()
+        case .authorizedWhenInUse:
+            startUpdates()
+            requestAlwaysOnce()
         case .notDetermined:
             break
         default:

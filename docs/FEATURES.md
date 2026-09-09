@@ -269,8 +269,13 @@ Windows are taken relative to your latest recorded day and auto-widen on sparse 
 **Sidebar: Workouts · iPhone: Train tab for live Start / Stop; history still under Workouts.**
 
 On iPhone, **Train** in the tab bar is a live session: Start / Stop on this phone
-(GPS on run/walk/ride/hike, WHOOP HR if the strap is bonded). Log a session after
+(GPS on run/walk/ride/hike, WHOOP HR if the strap is bonded). The session is
+checkpointed on the phone so locking the screen or a memory kill does not wipe
+it; opening the app again resumes elapsed time, GPS and HR. Log a session after
 the fact from Today. There is no Apple Watch app.
+
+Sleep on iPhone scores the local night window (18:00–14:00) and loads the newest
+nights, then offloads from the strap when you open the app in the morning.
 
 `WorkoutsView.swift` — the activity log, threaded together:
 

@@ -17,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.3.7</string>
+	<string>1.3.8</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSApplicationCategoryType</key>
@@ -30,6 +30,8 @@
 	<string>NOOP connects directly to your WHOOP strap over Bluetooth to read heart rate and sensor data locally on this iPhone. Nothing leaves your device.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>NOOP uses this iPhone’s GPS during a live run, walk, ride or hike so it can record distance and pace. Location stays on the phone. An Apple Watch is not required.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>NOOP keeps using this iPhone’s GPS after you lock the screen so a live run, walk, ride or hike does not stop tracking. Location stays on the phone.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>NOOP reads this iPhone’s step count during a live walk, run or hike. Motion data stays on the phone.</string>
 	<key>UIBackgroundModes</key>

@@ -57,7 +57,7 @@ final class IntelligenceEngine: ObservableObject {
         let baselines = AnalyticsEngine.ProfileBaselines(hrv: hrvBase, restingHR: rhrBase)
 
         let maxHR = profile.hrMaxOverride > 0 ? Double(profile.hrMaxOverride) : nil
-        let now = Int(Date().timeIntervalSince1970)
+        let tz = TimeZone.current
         var out: [Computed] = []
         var dailies: [DailyMetric] = []
         var cachedSleep: [CachedSleepSession] = []
@@ -70,18 +70,19 @@ final class IntelligenceEngine: ObservableObject {
         let alreadyScored = PhoneBudget.skipScoringWhenImported
             ? IntelligenceSkip.scoredDays(in: hist) : []
 
-        for offset in 0..<maxDays {
-            let dayStart = now - offset * 86_400
-            let day = AnalyticsEngine.dayString(dayStart)
+        let wakeStarts = NightSampleWindow.wakeDayStarts(count: maxDays)
+        for wakeStart in wakeStarts {
+            let day = NightSampleWindow.dayString(wakeStart)
+            let utcDay = AnalyticsEngine.dayString(Int(wakeStart.timeIntervalSince1970) + 12 * 3_600)
             if PhoneBudget.skipScoringWhenImported {
-                let localDay = Repository.dayString(Date(timeIntervalSince1970: TimeInterval(dayStart)))
-                if IntelligenceSkip.shouldSkip(utcDay: day, localDay: localDay, scored: alreadyScored) {
+                if IntelligenceSkip.shouldSkip(utcDay: utcDay, localDay: day, scored: alreadyScored) {
                     continue
                 }
             }
-            // Read a generous window around the night that ends on `day`; the stager finds the span.
-            let from = dayStart - 30 * 3_600
-            let to = dayStart + 12 * 3_600
+            // 18:00 previous → 14:00 wake day, so LIMIT N is the night, not yesterday afternoon.
+            let window = NightSampleWindow.sampleRange(wakeDayStart: wakeStart)
+            let from = window.from
+            let to = window.to
 
             let hr = (try? await store.hrSamples(deviceId: deviceId, from: from, to: to, limit: sampleLimit)) ?? []
             guard hr.count >= 200 else { continue }   // need real raw data, not a stray sample
@@ -90,7 +91,8 @@ final class IntelligenceEngine: ObservableObject {
             let grav = (try? await store.gravitySamples(deviceId: deviceId, from: from, to: to, limit: sampleLimit)) ?? []
 
             let res = await Self.analyzeDayOffMain(day: day, hr: hr, rr: rr, resp: resp, gravity: grav,
-                                                   profile: up, baselines: baselines, maxHROverride: maxHR)
+                                                   profile: up, baselines: baselines, maxHROverride: maxHR,
+                                                   timeZone: tz)
             out.append(Computed(day: day, recovery: res.recovery, strain: res.strain,
                                 sleepMin: res.daily.totalSleepMin, hrv: res.daily.avgHrv,
                                 rhr: res.daily.restingHr))
@@ -123,13 +125,15 @@ final class IntelligenceEngine: ObservableObject {
         day: String, hr: [HRSample], rr: [RRInterval],
         resp: [RespSample], gravity: [GravitySample],
         profile: UserProfile, baselines: AnalyticsEngine.ProfileBaselines,
-        maxHROverride: Double?
+        maxHROverride: Double?,
+        timeZone: TimeZone
     ) async -> AnalyticsEngine.DayResult {
         await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .utility).async {
                 let result = AnalyticsEngine.analyzeDay(
                     day: day, hr: hr, rr: rr, resp: resp, gravity: gravity,
-                    profile: profile, baselines: baselines, maxHROverride: maxHROverride)
+                    profile: profile, baselines: baselines, maxHROverride: maxHROverride,
+                    timeZone: timeZone)
                 cont.resume(returning: result)
             }
         }

@@ -4,6 +4,8 @@ import StrandDesign
 /// Root — the sidebar shell, with the first-run onboarding/pairing wizard overlaid until complete,
 /// and a "What's New" changelog sheet shown automatically after an update.
 struct ContentView: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("noop.onboarded") private var onboarded = false
     @AppStorage("noop.lastSeenChangelogVersion") private var lastSeenChangelog = ""
     @AppStorage(NoopAppearance.storageKey) private var appearanceRaw = NoopAppearance.platformDefault.rawValue
@@ -40,6 +42,9 @@ struct ContentView: View {
             if onboarded && lastSeenChangelog != AppChangelog.currentVersion {
                 showWhatsNew = true
             }
+        }
+        .onChange(of: scenePhase) { phase in
+            model.handleScenePhase(phase)
         }
     }
 }

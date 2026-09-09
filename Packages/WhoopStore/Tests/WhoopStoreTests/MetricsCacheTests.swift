@@ -54,6 +54,20 @@ final class MetricsCacheTests: XCTestCase {
         XCTAssertEqual(rows.map { $0.startTs }, [500])
     }
 
+    func testSleepSessionNewestFirstLimit() async throws {
+        let store = try await WhoopStore.inMemory()
+        try await store.upsertSleepSessions([
+            CachedSleepSession(startTs: 100, endTs: 200, efficiency: nil, restingHr: nil, avgHrv: nil, stagesJSON: nil),
+            CachedSleepSession(startTs: 300, endTs: 400, efficiency: nil, restingHr: nil, avgHrv: nil, stagesJSON: nil),
+            CachedSleepSession(startTs: 500, endTs: 600, efficiency: nil, restingHr: nil, avgHrv: nil, stagesJSON: nil),
+        ], deviceId: "devA")
+        let newest = try await store.sleepSessions(deviceId: "devA", from: 0, to: 10_000,
+                                                   limit: 2, newestFirst: true)
+        XCTAssertEqual(newest.map { $0.startTs }, [500, 300])
+        let oldest = try await store.sleepSessions(deviceId: "devA", from: 0, to: 10_000, limit: 2)
+        XCTAssertEqual(oldest.map { $0.startTs }, [100, 300])
+    }
+
     // MARK: - daily metrics
 
     func testDailyMetricUpsertReadAndIdempotency() async throws {

@@ -17,6 +17,30 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.3.8 — Workout keeps going; last night actually shows
+
+After a day on the iPhone build: a live workout froze once the phone locked, and
+sleep did not move after overnight wear even though Today’s date was correct.
+
+- **Live workout:** elapsed time is computed from start, HR is recorded from strap
+  notifications (not only a UI timer), the session is saved to disk every 15 s so
+  a jetsam/kill can resume it, and outdoor sports can keep GPS after you lock the
+  screen (Allow Location → Always when asked).
+- **Sleep / last night:** Sleep was loading the *oldest* 90 imported nights, so a
+  WHOOP zip made `Last night` a date from months ago. It now loads the newest.
+  Scoring now reads the 18:00–14:00 local night instead of the first 24k samples
+  of yesterday afternoon. Opening the app kicks a strap offload and rescore
+  (that 15-min timer does not run while iOS has the app suspended). If gravity
+  never landed, a long low-HR night still stages as sleep.
+
+```bash
+git fetch origin cursor/workout-sleep-tracking-67db
+git checkout cursor/workout-sleep-tracking-67db
+xcodegen generate
+```
+
+Scheme **NOOPiOS**. Personal Team. Rebuild on the phone.
+
 ## 1.3.7 — Train is a tab (Start / Stop)
 
 The Start / Stop workout was easy to miss: the **Live** tab is strap heart rate,

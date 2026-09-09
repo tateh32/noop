@@ -71,6 +71,31 @@ final class SleepStagerTests: XCTestCase {
         XCTAssertTrue(SleepStager.detectSleep(gravity: []).isEmpty)
     }
 
+    func testDetectSleepFromHRFindsNocturnalBout() {
+        let tz = TimeZone(secondsFromGMT: 0)!
+        let start = 1_609_459_200 + 22 * 3600  // 2021-01-01 22:00 UTC
+        let hr = (0..<(90 * 60)).map { HRSample(ts: start + $0, bpm: 50) }
+        let sessions = SleepStager.detectSleepFromHR(hr: hr, timeZone: tz)
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions[0].start, start)
+        XCTAssertGreaterThan(sessions[0].end - sessions[0].start, 60 * 60)
+    }
+
+    func testDetectSleepFromHRRejectsShortAfternoon() {
+        let tz = TimeZone(secondsFromGMT: 0)!
+        let start = 1_609_459_200 + 14 * 3600  // 14:00 UTC
+        let hr = (0..<(90 * 60)).map { HRSample(ts: start + $0, bpm: 50) }
+        XCTAssertTrue(SleepStager.detectSleepFromHR(hr: hr, timeZone: tz).isEmpty)
+    }
+
+    func testDetectSleepUsesHRWhenGravityMissing() {
+        let tz = TimeZone(secondsFromGMT: 0)!
+        let start = 1_609_459_200 + 22 * 3600
+        let hr = (0..<(90 * 60)).map { HRSample(ts: start + $0, bpm: 52) }
+        let sessions = SleepStager.detectSleep(hr: hr, gravity: [], timeZone: tz)
+        XCTAssertEqual(sessions.count, 1)
+    }
+
     func testDetectSleepHRConfirmationRejectsHighHR() {
         // Still gravity but HR is well above the day median*1.05. The daytime is
         // long (4 h) and low-HR (55) so the day median stays ~55; the still 90-min

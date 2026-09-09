@@ -113,8 +113,12 @@ final class Repository: ObservableObject {
 
         let imported = (try? await store.dailyMetrics(deviceId: deviceId, from: fromDay, to: toDay)) ?? []
         let computed = (try? await store.dailyMetrics(deviceId: computedDeviceId, from: fromDay, to: toDay)) ?? []
-        let impSleep = (try? await store.sleepSessions(deviceId: deviceId, from: lo, to: hi, limit: sleepLimit)) ?? []
-        let compSleep = (try? await store.sleepSessions(deviceId: computedDeviceId, from: lo, to: hi, limit: sleepLimit)) ?? []
+        // Newest first: a years-long WHOOP import + LIMIT 90 oldest-first made
+        // Sleep's `sleeps.last` a night from months ago, so last night never showed.
+        let impSleep = (try? await store.sleepSessions(deviceId: deviceId, from: lo, to: hi,
+                                                       limit: sleepLimit, newestFirst: true)) ?? []
+        let compSleep = (try? await store.sleepSessions(deviceId: computedDeviceId, from: lo, to: hi,
+                                                        limit: sleepLimit, newestFirst: true)) ?? []
 
         self.days = Self.mergeDaily(imported: imported, computed: computed)
         self.sleeps = Self.mergeSleep(imported: impSleep, computed: compSleep)

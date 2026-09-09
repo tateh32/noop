@@ -60,6 +60,10 @@ final class AppModel: ObservableObject {
         // Smooth HR centrally so it's solid everywhere it's shown.
         live.$heartRate.sink { [weak self] _ in self?.ingestHR() }.store(in: &hrCancellables)
         live.$rr.sink { [weak self] _ in self?.ingestHR() }.store(in: &hrCancellables)
+        live.$bonded.sink { [weak self] bonded in
+            guard let self, bonded, self.session.running else { return }
+            self.startRealtimeHR()
+        }.store(in: &hrCancellables)
 
         // Physical-input + wear hooks (fired live by FrameRouter).
         live.onDoubleTap = { [weak self] in self?.handleDoubleTap() }
@@ -92,6 +96,41 @@ final class AppModel: ObservableObject {
                 }
             }
         }
+
+        ble.onHistoricalSyncComplete = { [weak self] in
+            Task { @MainActor in
+                guard let self, UserDefaults.standard.bool(forKey: "noop.onboarded") else { return }
+                await self.intelligence.analyzeRecent()
+            }
+        }
+
+        if session.restoreIfNeeded(hr: { [weak self] in self?.bpm }, profile: profile),
+           live.bonded {
+            startRealtimeHR()
+        }
+    }
+
+    /// iPhone: opening the app in the morning must kick a historical offload and
+    /// rescore. The 15-min DispatchSource timer does not fire while suspended, so
+    /// last night sat on the strap until this hook existed.
+    func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            if session.running, live.bonded { startRealtimeHR() }
+            ble.resumeAfterForeground()
+            Task { [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if UserDefaults.standard.bool(forKey: "noop.onboarded") {
+                    await self.intelligence.analyzeRecent()
+                }
+            }
+        case .background:
+            if session.running { session.persist() }
+            ble.pruneRaw()
+        default:
+            break
+        }
     }
 
     /// Fold a fresh reading into the smoothing window and republish a stable bpm.
@@ -112,6 +151,7 @@ final class AppModel: ObservableObject {
         if hrWindow.count > 40 { hrWindow.removeFirst(hrWindow.count - 40) }
         let vals = hrWindow.map(\.v).sorted()
         bpm = vals.isEmpty ? nil : Int(vals[vals.count / 2].rounded())
+        if session.running { session.noteHR(bpm) }
         evaluateStress()
     }
 

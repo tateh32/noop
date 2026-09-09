@@ -92,6 +92,8 @@ public final class BLEManager: NSObject, ObservableObject {
     private var backfillFrameQueue: [[UInt8]] = []
     /// True while the drain task is running (prevents a second drain task from launching).
     private var backfillDraining = false
+    /// Fired after a full HISTORY_COMPLETE so the scorer can turn last night into Sleep.
+    var onHistoricalSyncComplete: (() -> Void)?
 
     // MARK: CoreBluetooth
     private var central: CBCentralManager!
@@ -209,7 +211,11 @@ public final class BLEManager: NSObject, ObservableObject {
     /// Apply the raw-outbox retention policy (24h synced window / 50MB unsynced cap).
     /// Called when the app enters the background; no-op without a concrete store.
     public func pruneRaw() {
-        Task { @MainActor in await collector?.prune() }
+        Task { @MainActor in
+            await collector?.flush()
+            await collector?.flushStandardHR()
+            await collector?.prune()
+        }
     }
 
     /// Light storage summary for the UI (decoded rows, raw batches, raw bytes). nil without a store.
@@ -381,6 +387,7 @@ public final class BLEManager: NSObject, ObservableObject {
         if reason == "HISTORY_COMPLETE" {
             state.lastSyncedAt = Date().timeIntervalSince1970
             UserDefaults.standard.set(state.lastSyncedAt, forKey: "lastSyncedAt")
+            onHistoricalSyncComplete?()
         }
         checkStrapLiveness()         // safety-net: strap ahead of us AND our frontier frozen ⇒ stuck?
     }
@@ -478,6 +485,16 @@ public final class BLEManager: NSObject, ObservableObject {
     /// Periodic-timer callback: routes through the rate-limited requestSync entry point.
     private func triggerPeriodicBackfill() {
         requestSync(.periodic)
+    }
+
+    /// Opening the app after overnight suspend: offload if we are still bonded,
+    /// otherwise scan again (the 3 s disconnect-rescan timer does not fire while suspended).
+    func resumeAfterForeground() {
+        if state.connected && state.bonded {
+            requestSync(.foreground)
+        } else if !intentionalDisconnect {
+            connect()
+        }
     }
 
     // MARK: Helpers
