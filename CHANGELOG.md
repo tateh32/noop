@@ -17,6 +17,35 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.3.9 — Smart alarm lives on Sleep
+
+- **Smart alarm moved to Sleep**, under last night, where you actually think about
+  wake time. Automations keeps a pointer to it. Changing the light-sleep window
+  now re-arms the strap (it silently did nothing before).
+- **The light-sleep window says what it is:** still building. Your alarm fires at
+  the time you set; NOOP does not yet wake you early on a detected light phase.
+
+Fixes found in a full review pass over the iPhone target:
+
+- **Sleep could show "no nights yet" for a night it had already scored.** The
+  `stagesJSON` column has two shapes — a minutes dict from an import, hypnogram
+  segments from on-device scoring — and the screen only read the first.
+- **A failed "Stop and save" lost the workout.** The session was torn down before
+  the write succeeded, so the retry had nothing left to save.
+- **Scoring had four independent triggers and no mutual exclusion**, so passes
+  overlapped, each holding several nights of 1 Hz samples.
+- **The newest two nights are always rescored**, so a pass that ran before the
+  strap finished offloading can't freeze last night as "done".
+- **"Bonded" could be a lie:** the flag was never cleared on disconnect.
+- **Realtime heart rate is released when a workout ends** instead of being
+  re-armed by keep-alive every 30 seconds forever.
+- Workout heart-rate stats are computed incrementally, and the crash-recovery
+  snapshot stores totals instead of re-encoding a 29,000-entry array every 15s.
+- Locked-screen GPS uses "While Using the App" plus the background indicator —
+  no second Always prompt.
+- The app shell no longer re-renders on every heartbeat.
+- The 30-day sleep trend no longer shifts every point by a day west of Greenwich.
+
 ## 1.3.8 — Workout keeps going; last night actually shows
 
 After a day on the iPhone build: a live workout froze once the phone locked, and

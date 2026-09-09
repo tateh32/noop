@@ -103,23 +103,8 @@ final class LiveSessionRecorder: ObservableObject {
         #endif
         running = true
         startTicker()
+        startSensors()
         persist()
-
-        #if os(iOS)
-        if usesGPS {
-            gps.onFix = { [weak self] lat, lon, acc in self?.ingestFix(lat: lat, lon: lon, accuracy: acc) }
-            gps.onDenied = { [weak self] in
-                self?.gpsNote = "Location off — distance unavailable. Enable it in Settings → NOOP."
-            }
-            gps.begin()
-        }
-        if usesSteps, CMPedometer.isStepCountingAvailable(), let start = startedAt {
-            pedometer.startUpdates(from: start) { [weak self] data, _ in
-                let n = data?.numberOfSteps.intValue ?? 0
-                Task { @MainActor in self?.steps = n }
-            }
-        }
-        #endif
     }
 
     /// Resume a session after jetsam / process death. Returns true if one was running.
@@ -162,6 +147,13 @@ final class LiveSessionRecorder: ObservableObject {
         running = true
         refreshElapsed()
         startTicker()
+        startSensors()
+        return true
+    }
+
+    /// Attach GPS and the pedometer for the current sport. Idempotent enough to
+    /// call on start, on resume, and when a failed save keeps the session alive.
+    private func startSensors() {
         #if os(iOS)
         if usesGPS {
             gps.onFix = { [weak self] lat, lon, acc in self?.ingestFix(lat: lat, lon: lon, accuracy: acc) }
@@ -171,13 +163,13 @@ final class LiveSessionRecorder: ObservableObject {
             gps.begin()
         }
         if usesSteps, CMPedometer.isStepCountingAvailable(), let start = startedAt {
+            pedometer.stopUpdates()   // no-op if idle; avoids stacking handlers on resume
             pedometer.startUpdates(from: start) { [weak self] data, _ in
                 let n = data?.numberOfSteps.intValue ?? 0
                 Task { @MainActor in self?.steps = n }
             }
         }
         #endif
-        return true
     }
 
     /// Called from AppModel on every strap HR sample so a backgrounded workout
@@ -247,7 +239,10 @@ final class LiveSessionRecorder: ObservableObject {
         // even though the UI offered "Stop and save again".
         let saved = await repo.logWorkout(row)
         guard saved else {
-            startTicker()   // keep the session alive so the retry has something to save
+            // Keep the session fully alive for the retry — the ticker alone would
+            // leave distance and steps frozen while the clock kept moving.
+            startTicker()
+            startSensors()
             return false
         }
         running = false
@@ -332,7 +327,9 @@ struct LiveSessionSnapshot: Codable, Equatable {
     var hrCount: Int
     var hrMax: Int?
 
-    static let defaultsKey = "noop.liveSession.v1"
+    /// v2 stores HR aggregates instead of every beat. The key is versioned so a
+    /// v1 blob is ignored rather than failing to decode.
+    static let defaultsKey = "noop.liveSession.v2"
     static let maxAge: TimeInterval = 12 * 3600
 
     var isFresh: Bool {

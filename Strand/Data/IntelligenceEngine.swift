@@ -21,6 +21,9 @@ final class IntelligenceEngine: ObservableObject {
 
     /// The in-flight scoring pass, if any. See `analyzeRecent`.
     private var analyzeTask: Task<Void, Never>?
+    /// Set when a trigger arrives mid-pass, so data that landed after the pass
+    /// started (a strap offload completing) still gets scored.
+    private var needsRescore = false
 
     struct Computed: Identifiable {
         let day: String
@@ -48,13 +51,25 @@ final class IntelligenceEngine: ObservableObject {
     /// killed on an iPhone. A caller that arrives mid-pass awaits the in-flight one.
     func analyzeRecent(maxDays: Int = PhoneBudget.intelligenceDays) async {
         if let inFlight = analyzeTask {
+            // Ask the running pass for a catch-up rather than starting a second one.
+            needsRescore = true
             await inFlight.value
             return
         }
-        let task = Task { await analyzeRecentImpl(maxDays: maxDays) }
+        let task = Task { [maxDays] in
+            await analyzeRecentImpl(maxDays: maxDays)
+            if needsRescore {
+                needsRescore = false
+                await analyzeRecentImpl(maxDays: maxDays)
+            }
+        }
         analyzeTask = task
+        needsRescore = false
+        // `defer`, not a trailing assignment: if the caller's await is torn down the
+        // handle must still be released, or every later trigger would await a
+        // finished task and silently skip scoring for the rest of the session.
+        defer { analyzeTask = nil }
         await task.value
-        analyzeTask = nil
     }
 
     private func analyzeRecentImpl(maxDays: Int) async {

@@ -45,7 +45,10 @@ struct SmartAlarmCard: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Light-sleep window").font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
-                Text("Wake up to this many minutes early if \(DeviceCopy.here) stays awake & connected and a light phase is detected.")
+                // Honest about scope: the firmware alarm fires at the fixed time.
+                // Waking early on a detected light phase needs live overnight
+                // staging, which is not wired up yet — do not imply that it is.
+                Text("Still building. Your alarm fires at the time above; NOOP does not yet wake you early on a light phase.")
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
