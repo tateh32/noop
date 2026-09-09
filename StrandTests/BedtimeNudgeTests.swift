@@ -53,18 +53,20 @@ final class BedtimeNudgeTests: XCTestCase {
     func testLineNamesDebtBedtime() {
         let cal = utcCal()
         let now = cal.date(from: DateComponents(year: 2026, month: 9, day: 9, hour: 18))!
+        // Typical 390 < 7.5h floor, so need is 450. Two 390-min nights → 120 min debt.
+        // 07:00 − 450 − 120 = 21:30.
         let days = [day("2026-09-08", asleep: 390), day("2026-09-09", asleep: 390)]
         let line = BedtimeNudge.line(now: now, wakeMinutes: 7 * 60, days: days, calendar: cal)
-        XCTAssertTrue(line.hasPrefix("To clear your debt, be in bed by "))
-        XCTAssertTrue(line.contains("22:"))
+        XCTAssertEqual(line, "To clear your debt, be in bed by 21:30.")
     }
 
     func testZeroDebtLineIsQuiet() {
         let cal = utcCal()
         let now = cal.date(from: DateComponents(year: 2026, month: 9, day: 9, hour: 18))!
+        // Typical 480 raises need to 8h, so 07:00 − 480 min = 23:00.
         let days = [day("2026-09-08", asleep: 480), day("2026-09-09", asleep: 480)]
         let line = BedtimeNudge.line(now: now, wakeMinutes: 7 * 60, days: days, calendar: cal)
-        XCTAssertEqual(line, "Be in bed by 23:30 to hit your need.")
+        XCTAssertEqual(line, "Be in bed by 23:00 to hit your need.")
     }
 
     func testTimezoneShiftsTheAbsoluteInstantNotTheClock() {

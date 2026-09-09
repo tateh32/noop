@@ -18,7 +18,8 @@ struct WorkoutLiveActivity: Widget {
                     + Text(" bpm").font(.caption)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(WorkoutLiveActivityState.elapsedLabel(context.state.elapsedS))
+                    Text(timerInterval: context.attributes.startedAt...Date.distantFuture,
+                         countsDown: false)
                         .font(.title.monospacedDigit())
                 }
             } compactLeading: {
@@ -43,7 +44,7 @@ private struct WorkoutLockScreen: View {
                 Text(state.sport.uppercased())
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text(WorkoutLiveActivityState.elapsedLabel(state.elapsedS))
+                Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
                     .font(.system(size: 28, weight: .semibold).monospacedDigit())
             }
             Spacer()
