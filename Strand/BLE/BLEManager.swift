@@ -2,6 +2,9 @@ import Foundation
 import CoreBluetooth
 import WhoopProtocol
 import WhoopStore
+#if os(iOS)
+import UIKit
+#endif
 
 /// CoreBluetooth engine for the WHOOP 4.0: scan-by-service → connect → discover →
 /// BOND (one confirmed write) → subscribe → reassemble char-05 frames → FrameRouter.
@@ -105,6 +108,16 @@ public final class BLEManager: NSObject, ObservableObject {
     /// Non-nil signals that `centralManagerDidUpdateState` should reconnect this
     /// specific peripheral rather than starting a fresh scan.
     private var restoredPeripheral: CBPeripheral?
+    /// If a restored reconnect never reaches `didConnect`, cancel it and scan —
+    /// a zombie OS-level link stops the strap advertising, so a hanging connect
+    /// would leave us waiting forever.
+    private var restoreConnectTimeout: DispatchWorkItem?
+    #if os(iOS)
+    /// Extends execution while a historical session is in flight so locking the
+    /// phone cannot freeze a HISTORY_END ack. Long pulls stay alive via
+    /// bluetooth-central notifications, not this extra ~30s budget.
+    private var offloadBgTask: UIBackgroundTaskIdentifier = .invalid
+    #endif
     private var cmdCharacteristic: CBCharacteristic?
     private var reassembler = Reassembler()
     private var seq: UInt8 = 0
@@ -198,11 +211,35 @@ public final class BLEManager: NSObject, ObservableObject {
             log("Bluetooth not powered on (state=\(central.state.rawValue)); cannot scan yet")
             return
         }
+        let services = [model.scanService, BLEManager.heartRateService, BLEManager.batteryService]
+        let held = central.retrieveConnectedPeripherals(withServices: services)
+        if let p = held.first {
+            attach(to: p, reason: "Already connected at OS level —")
+            return
+        }
         log("Scanning for \(model.displayName)…")
         central.scanForPeripherals(
-            withServices: [model.scanService],
+            withServices: [model.scanService, BLEManager.heartRateService],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
+    }
+
+    /// Take over a known peripheral (OS-held, restored, or just discovered).
+    private func attach(to p: CBPeripheral, reason: String) {
+        central.stopScan()
+        peripheral = p
+        p.delegate = self
+        log("\(reason) \(p.name ?? p.identifier.uuidString) cb-state=\(p.state.rawValue)")
+        if p.state == .connected {
+            restoredPeripheral = nil
+            restoreConnectTimeout?.cancel()
+            state.connected = true
+            p.discoverServices([
+                selectedModel.scanService, BLEManager.heartRateService, BLEManager.batteryService,
+            ])
+        } else {
+            central.connect(p, options: nil)
+        }
     }
 
     public func disconnect() {
@@ -302,18 +339,20 @@ public final class BLEManager: NSObject, ObservableObject {
     private func beginBackfill() {
         // Never offload before the connect handshake has run: a racing foreground/restore trigger
         // firing SEND_HISTORICAL ahead of hello/SET_CLOCK was part of the storm that stopped serving.
-        guard connectHandshakeDone else {
-            log("Backfill: deferred — connect handshake not done yet")
+        guard BackfillPolicy.shouldStartSession(handshakeDone: connectHandshakeDone,
+                                                storeReady: backfiller != nil),
+              let backfiller else {
+            if !connectHandshakeDone {
+                log("Backfill: deferred — connect handshake not done yet")
+            } else {
+                log("Backfill: store not ready — deferring to next periodic tick")
+            }
             return
         }
-        guard let backfiller else {
-            // Store not ready yet. Do NOT force live HR — the type-47 backfill is the metric
-            // source. Just log; the next periodic backfill tick will run once the store is ready.
-            log("Backfill: store not ready — deferring to next periodic tick")
-            return
-        }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: BLEManager.backfillLastAtKey)
         backfiller.begin()
         backfilling = true
+        beginOffloadBackgroundTask()
         // Payload MUST be [0x00], NOT empty: verified on-device that this strap serves type-47 only with
         // [0x00] (empty → 0 frames on a clean stable link with ~2k records pending); the Mac ground-truth
         // offload (re/sync_openwhoop.py, re/diagnose_biometrics.py) uses [0x00] too. Plain offload — the
@@ -394,8 +433,40 @@ public final class BLEManager: NSObject, ObservableObject {
             UserDefaults.standard.set(state.lastSyncedAt, forKey: "lastSyncedAt")
             state.offload.noteSynced(at: state.lastSyncedAt ?? 0)
             onHistoricalSyncComplete?()
+        } else if reason == "timeout" {
+            // Score whatever landed, then immediately continue. The 90s event
+            // floor used to pause between watchdog cuts while last night
+            // stayed on the strap.
+            onHistoricalSyncComplete?()
+            if state.connected && state.bonded {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                    self?.requestSync(.resume)
+                }
+            }
         }
-        checkStrapLiveness()         // safety-net: strap ahead of us AND our frontier frozen ⇒ stuck?
+        checkStrapLiveness()
+        endOffloadBackgroundTask()
+        if BackgroundOffload.shouldSendRealtime(backfilling: false),
+           wantsRealtime || wantsSmartWake {
+            send(.toggleRealtimeHR, payload: [0x01])
+        }
+    }
+
+    private func beginOffloadBackgroundTask() {
+        #if os(iOS)
+        endOffloadBackgroundTask()
+        offloadBgTask = UIApplication.shared.beginBackgroundTask(withName: "noop-offload") { [weak self] in
+            self?.endOffloadBackgroundTask()
+        }
+        #endif
+    }
+
+    private func endOffloadBackgroundTask() {
+        #if os(iOS)
+        guard offloadBgTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(offloadBgTask)
+        offloadBgTask = .invalid
+        #endif
     }
 
     /// After an offload, judge liveness: stuck = strap reports records newer than our frontier AND our
@@ -405,8 +476,10 @@ public final class BLEManager: NSObject, ObservableObject {
     private func checkStrapLiveness() {
         let strapNewest = strapNewestTs
         Task { @MainActor in
-            let frontier = await collector?.latestHRSampleTs()
-            let front: Int? = frontier ?? nil
+            let frontier = SyncStatus.biometricFrontier(
+                hrTs: await collector?.latestHRSampleTs(),
+                gravityTs: await collector?.latestGravitySampleTs())
+            let front: Int? = frontier
             let now = Date().timeIntervalSince1970
             let stuck = stuckDetector.observe(strapNewestTs: strapNewest,
                                               ourFrontierTs: front,
@@ -434,7 +507,12 @@ public final class BLEManager: NSObject, ObservableObject {
     // MARK: - Keep-alive (always-ping + liveness watchdog)
 
     /// Enable the heavy realtime stream (type-40/43) and remember we want it re-armed by keep-alive.
-    public func startRealtime() { wantsRealtime = true; send(.toggleRealtimeHR, payload: [0x01]) }
+    /// Enable the heavy realtime stream (type-40/43) and remember we want it re-armed by keep-alive.
+    public func startRealtime() {
+        wantsRealtime = true
+        guard BackgroundOffload.shouldSendRealtime(backfilling: backfilling) else { return }
+        send(.toggleRealtimeHR, payload: [0x01])
+    }
     /// Stop the realtime stream. The lightweight 0x2A37 HR keeps recording continuously regardless.
     public func stopRealtime() {
         wantsRealtime = false
@@ -495,18 +573,20 @@ public final class BLEManager: NSObject, ObservableObject {
     }
 
     /// The single gated entry point for every historical-offload kick. Applies the connection/state
-    /// gate AND the BackfillPolicy rate-limiter for the trigger. On a go: records the attempt time
-    /// (persisted) and starts the offload.
+    /// gate AND the BackfillPolicy rate-limiter for the trigger. The attempt timestamp is recorded
+    /// only when beginBackfill actually starts the session (not when it defers).
     func requestSync(_ trigger: BackfillTrigger) {
         guard BLEManager.shouldRunPeriodicBackfill(
-            connected: state.connected, bonded: state.bonded, backfilling: backfilling) else { return }
+            connected: state.connected, bonded: state.bonded, backfilling: backfilling) else {
+            log("Backfill: \(trigger) skipped (connected=\(state.connected) bonded=\(state.bonded) backfilling=\(backfilling))")
+            return
+        }
         let now = Date().timeIntervalSince1970
         let last = UserDefaults.standard.object(forKey: BLEManager.backfillLastAtKey) as? Double
         guard BackfillPolicy.shouldRun(trigger: trigger, now: now, lastBackfillAt: last) else {
             log("Backfill: \(trigger) skipped (rate-limited; last \(last.map { Int(now - $0) } ?? -1)s ago)")
             return
         }
-        UserDefaults.standard.set(now, forKey: BLEManager.backfillLastAtKey)
         beginBackfill()
     }
 
@@ -531,7 +611,9 @@ public final class BLEManager: NSObject, ObservableObject {
     }()
 
     private func log(_ s: String) {
-        state.append(log: "[\(timestamp())] \(s)")
+        let line = "[\(timestamp())] \(s)"
+        state.append(log: line)
+        BLELogFile.append(line)
     }
     private func timestamp() -> String {
         BLEManager.logTimeFormatter.string(from: Date())
@@ -614,13 +696,8 @@ extension BLEManager: CBCentralManagerDelegate {
         Task { @MainActor in await bootstrapStore() }
         if let p = restoredPeripheral {
             log("poweredOn with restored peripheral — reconnecting \(p.identifier)")
-            if p.state != .connected {
-                central.connect(p, options: nil)
-            } else {
-                p.discoverServices([
-                    selectedModel.scanService, BLEManager.heartRateService, BLEManager.batteryService,
-                ])
-            }
+            attach(to: p, reason: "Restore reconnect —")
+            if p.state != .connected { armRestoreConnectTimeout() }
         } else {
             connect()
         }
@@ -640,6 +717,7 @@ extension BLEManager: CBCentralManagerDelegate {
 
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         restoredPeripheral = nil
+        restoreConnectTimeout?.cancel()
         state.connected = true
         log("Connected — discovering services")
         peripheral.discoverServices([
@@ -672,6 +750,7 @@ extension BLEManager: CBCentralManagerDelegate {
         backfillTimer = nil
         keepAliveTimer?.cancel()
         keepAliveTimer = nil
+        endOffloadBackgroundTask()
         Task { @MainActor in await collector?.flushStandardHR() }   // persist any buffered 0x2A37 HR
         if !intentionalDisconnect {
             log("Disconnected\(error.map { " — \($0.localizedDescription)" } ?? ""); rescanning in 3s")
@@ -688,6 +767,24 @@ extension BLEManager: CBCentralManagerDelegate {
                                didFailToConnect peripheral: CBPeripheral,
                                error: Error?) {
         log("Failed to connect\(error.map { " — \($0.localizedDescription)" } ?? "")")
+        restoredPeripheral = nil
+        restoreConnectTimeout?.cancel()
+        if !intentionalDisconnect { connect() }
+    }
+
+    private func armRestoreConnectTimeout() {
+        restoreConnectTimeout?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self, !self.state.connected else { return }
+            self.log("Restore reconnect timed out — cancelling zombie link and scanning")
+            if let p = self.restoredPeripheral ?? self.peripheral {
+                self.central.cancelPeripheralConnection(p)
+            }
+            self.restoredPeripheral = nil
+            self.connect()
+        }
+        restoreConnectTimeout = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: item)
     }
 
     /// State restoration entry point (M3 background collection).
@@ -862,18 +959,30 @@ extension BLEManager: CBPeripheralDelegate {
          0, 0, 0, 0]
     }
 
-    /// Newest plausible-unix marker in a GET_DATA_RANGE COMMAND_RESPONSE = the strap's newest stored
-    /// record. Mirrors re/diagnose_biometrics.py: scan u32 LE words in the response body (data starts at
-    /// frame[7], after [type,seq,cmd]), keep those in the unix range, return the max. nil if none.
-    static func dataRangeNewestUnix(from frame: [UInt8]) -> Int? {
-        guard frame.count > 7 else { return nil }
-        let body = Array(frame[7...]); var newest: Int? = nil; var i = 0
-        while i + 4 <= body.count {
-            let w = Int(body[i]) | Int(body[i+1]) << 8 | Int(body[i+2]) << 16 | Int(body[i+3]) << 24
-            if w >= 1_700_000_000 && w <= 1_900_000_000 { newest = max(newest ?? 0, w) }
-            i += 4
+    /// Oldest/newest unix in a GET_DATA_RANGE COMMAND_RESPONSE.
+    /// Payload is a 3-byte prefix then two u32 LE timestamps — not a word scan
+    /// from offset 0, which on this strap decoded as 2025-07-06 … 2028-06-24.
+    static func dataRangeUnixBounds(from frame: [UInt8]) -> (oldest: Int, newest: Int)? {
+        guard frame.count >= 7 + 3 + 8 else { return nil }
+        let body = Array(frame[7...])
+        func u32(_ o: Int) -> Int {
+            Int(body[o]) | Int(body[o+1]) << 8 | Int(body[o+2]) << 16 | Int(body[o+3]) << 24
         }
-        return newest
+        let a = u32(3), b = u32(7)
+        let inRange = { (w: Int) in (1_700_000_000...1_900_000_000).contains(w) }
+        guard inRange(a), inRange(b) else { return nil }
+        return (min(a, b), max(a, b))
+    }
+
+    static func dataRangeNewestUnix(from frame: [UInt8]) -> Int? {
+        dataRangeUnixBounds(from: frame)?.newest
+    }
+
+    static func unixStamp(_ ts: Int) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f.string(from: Date(timeIntervalSince1970: TimeInterval(ts)))
     }
 
     public func peripheral(_ peripheral: CBPeripheral,
@@ -901,11 +1010,18 @@ extension BLEManager: CBPeripheralDelegate {
             // Reassemble (no-op for already-complete frames) then route each complete frame.
             for frame in reassembler.feed(bytes) {
                 router.handle(frame: frame)                       // UI (always)
-                if frame.count > 6, frame[6] == WhoopCommand.getDataRange.rawValue,
-                   let newest = BLEManager.dataRangeNewestUnix(from: frame) {
-                    strapNewestTs = newest                        // feeds the liveness watchdog
-                    state.offload.noteRange(strapNewest: newest,
-                                             frontier: state.offload.frontierTs)
+                if frame.count > 6,
+                   frame[4] == 36, // COMMAND_RESPONSE
+                   frame[6] == WhoopCommand.getDataRange.rawValue {
+                    if let bounds = BLEManager.dataRangeUnixBounds(from: frame) {
+                        strapNewestTs = bounds.newest
+                        state.offload.noteRange(strapNewest: bounds.newest,
+                                                 frontier: state.offload.frontierTs)
+                        log("Data range oldest=\(BLEManager.unixStamp(bounds.oldest)) newest=\(BLEManager.unixStamp(bounds.newest))")
+                    } else {
+                        let payload = frame.count > 7 ? Array(frame[7...]) : []
+                        log("Data range unparsed payload=\(hex(payload))")
+                    }
                 }
                 // Clock correlation runs in both live and backfill modes. Once established it
                 // unblocks both the Collector (live path) and the Backfiller (chunk decoding).

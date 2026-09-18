@@ -12,10 +12,22 @@ enum SyncStatus {
         var now: Date
     }
 
-    /// 1 Hz approximation: strap newest unix minus our HR frontier.
+    /// 1 Hz approximation: strap newest unix minus our biometric frontier.
     static func pendingRecords(strapNewestTs: Int?, frontierTs: Int?) -> Int? {
         guard let newest = strapNewestTs, let frontier = frontierTs else { return nil }
         return max(0, newest - frontier)
+    }
+
+    /// Live 0x2A37 HR can be current while type-47 gravity froze days ago.
+    /// Pending / stuck must follow the older of the two, or Today shows
+    /// "0 pending" with no last night.
+    static func biometricFrontier(hrTs: Int?, gravityTs: Int?) -> Int? {
+        switch (hrTs, gravityTs) {
+        case let (h?, g?): return min(h, g)
+        case let (h?, nil): return h
+        case let (nil, g?): return g
+        default: return nil
+        }
     }
 
     /// Last night = the sleep whose wake civil day is the current NightSampleWindow

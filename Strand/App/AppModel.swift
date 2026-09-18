@@ -159,27 +159,36 @@ final class AppModel: ObservableObject {
         #endif
     }
 
-    /// iPhone: opening the app in the morning must kick a historical offload and
-    /// rescore. The 15-min DispatchSource timer does not fire while suspended, so
-    /// last night sat on the strap until this hook existed.
+    /// iPhone: opening the app kicks offload+rescore. Locking or switching apps
+    /// must NOT tear the strap down — stop the live HR flood and keep historical
+    /// pull running under bluetooth-central.
     func handleScenePhase(_ phase: ScenePhase) {
+        let kind: BackgroundOffload.Phase
         switch phase {
-        case .active:
-            if session.running, live.bonded { startRealtimeHR() }
-            ble.resumeAfterForeground()
-            Task { [weak self] in
-                guard let self else { return }
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                if UserDefaults.standard.bool(forKey: "noop.onboarded") {
-                    await self.intelligence.analyzeRecent()
-                    await self.syncHealthKit()
-                }
+        case .active: kind = .active
+        case .background: kind = .background
+        default: kind = .inactive
+        }
+        for action in BackgroundOffload.actions(
+            phase: kind, trainRunning: session.running,
+            connected: live.connected, bonded: live.bonded) {
+            switch action {
+            case .persistSession: session.persist()
+            case .pruneRaw: ble.pruneRaw()
+            case .stopLiveHR: stopRealtimeHR()
+            case .startLiveHR: startRealtimeHR()
+            case .requestOffload: ble.requestSync(.background)
+            case .resumeConnection: ble.resumeAfterForeground()
             }
-        case .background:
-            if session.running { session.persist() }
-            ble.pruneRaw()
-        default:
-            break
+        }
+        guard kind == .active else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if UserDefaults.standard.bool(forKey: "noop.onboarded") {
+                await self.intelligence.analyzeRecent()
+                await self.syncHealthKit()
+            }
         }
     }
 

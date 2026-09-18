@@ -89,6 +89,11 @@ final class Collector {
         return try? await s.latestHRSampleTs(deviceId: deviceId)
     }
 
+    func latestGravitySampleTs() async -> Int? {
+        guard let s = concreteStore else { return nil }
+        return try? await s.latestGravitySampleTs(deviceId: deviceId)
+    }
+
     /// Apply the raw-retention policy. Returns rows pruned (0 if no concrete store).
     @discardableResult
     func prune() async -> Int {

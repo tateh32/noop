@@ -536,7 +536,7 @@ struct SleepView: View {
     @ViewBuilder
     private var emptyState: some View {
         if repo.loaded {
-            ComingSoon(what: "No nights here yet. Import your WHOOP export in Data Sources to see every night, your sleep stages and trends straight away. Or open Intelligence to see last night computed from the strap after you wear it to bed.")
+            ComingSoon(what: "Last night is not scored yet. Keep the official WHOOP app closed and this phone near the strap — NOOP is pulling the night off it. Sleep shows up once that pull finishes, usually a minute or two.")
         } else {
             ComingSoon(what: "Loading your sleep history…")
         }

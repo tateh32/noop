@@ -294,7 +294,11 @@ func registerPostHooks() {
         let spec = schema.packet(forType: Int(frame[4]))
         let version = Int(frame[5])
         fb.parsed["hist_version"] = .int(version)
-        guard let entry = spec.flatMap({ schema.resolveVersion($0.versions, version) }) else {
+        // Unknown firmware versions used to decode as an opaque blob. We still
+        // HISTORY_END-acked those chunks, so last night's 1 Hz never landed.
+        // WHOOP 4.0 keeps the V24 DSP offsets and appends bytes; fall back.
+        guard let entry = spec.flatMap({ schema.resolveVersion($0.versions, version) })
+                ?? spec.flatMap({ schema.resolveVersion($0.versions, 24) }) else {
             fb.region(7, length, "HISTORICAL_DATA v\(version) (unmapped layout)", "unknown")
             return
         }

@@ -112,6 +112,11 @@ public struct Streams: Equatable, Codable {
         events = try c.decodeIfPresent([WhoopEvent].self, forKey: .events) ?? []
         battery = try c.decodeIfPresent([BatterySample].self, forKey: .battery) ?? []
     }
+
+    public var sampleCount: Int {
+        hr.count + rr.count + spo2.count + skinTemp.count + resp.count
+            + gravity.count + events.count + battery.count
+    }
 }
 
 extension Streams { public static let empty = Streams() }
