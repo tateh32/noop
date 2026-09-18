@@ -111,6 +111,15 @@ extension WhoopStore {
         }
     }
 
+    /// Max gravity sample timestamp — the 1 Hz DSP frontier. Live HR can be
+    /// current while this is days behind; pending/stuck must use this too.
+    public func latestGravitySampleTs(deviceId: String) async throws -> Int? {
+        try syncRead { db in
+            try Int.fetchOne(db,
+                sql: "SELECT MAX(ts) FROM gravitySample WHERE deviceId = ?", arguments: [deviceId])
+        }
+    }
+
     /// Aggregate storage footprint: total decoded rows, raw batch count, total raw byteSize.
     public func storageStats() async throws -> (decodedRows: Int, rawBatches: Int, rawBytes: Int) {
         try syncRead { db in

@@ -110,43 +110,52 @@ final class Backfiller {
     /// Early-returns on any throw to preserve the safe-trim invariant.
     ///
     /// CRITICAL: high-freq-sync sends ONE HISTORY_START then REPEATED HISTORY_ENDs (a chunk-close
-    /// every ~50 records). So we must ack EVERY end and keep accumulating afterwards — NOT close
-    /// the chunk after the first. We snapshot+clear the accumulated frames but leave `chunkOpen`
-    /// TRUE so the records following this END become the next chunk. An END with no accumulated
-    /// records is still acked (it advances the strap's trim) — that's how the offload progresses.
-    /// `endFrame` carries the 8-byte `end_data` the ack requires.
+    /// every ~50 records). We snapshot+clear the accumulated frames but leave `chunkOpen`
+    /// TRUE so the records following this END become the next chunk.
+    /// Empty ENDs (no type-47) must NOT be acked — at weak RSSI that trimmed last night
+    /// off the strap with nothing stored. `endFrame` carries the 8-byte `end_data` the ack requires.
     private func finishChunk(unix: UInt32, trim: UInt32, endFrame: [UInt8]) async {
         guard let endData = Backfiller.endData(from: endFrame) else { return }
 
         let frames = chunk
         chunk.removeAll(keepingCapacity: true)   // next records accumulate into the next chunk
 
-        if !frames.isEmpty {
-            // type-47 HISTORICAL_DATA carries its OWN real-unix timestamp — extractHistoricalStreams
-            // ignores the clock offset for it — so the historical offload does NOT need GET_CLOCK.
-            // If the (device,wall) correlation isn't established yet (e.g. GET_CLOCK silent), fall back
-            // to an identity ref (device==wall==now): the offset math becomes a no-op, type-47 still
-            // decodes to correct wall time, and we can persist + ack + upload. The correlation is only
-            // truly required to map REALTIME (type-40/43) device-epoch timestamps, never in a hist chunk.
-            let ref = clockRef ?? { let now = Int(Date().timeIntervalSince1970); return ClockRef(device: now, wall: now) }()
-            let parsed = frames.map { parseFrame($0) }
-            let decoded = extract(parsed, ref.device, ref.wall)
-            do { try await store.insert(decoded, deviceId: deviceId) } catch { return }
+        // type-47 HISTORICAL_DATA carries its OWN real-unix timestamp — extractHistoricalStreams
+        // ignores the clock offset for it — so the historical offload does NOT need GET_CLOCK.
+        // If the (device,wall) correlation isn't established yet (e.g. GET_CLOCK silent), fall back
+        // to an identity ref (device==wall==now): the offset math becomes a no-op, type-47 still
+        // decodes to correct wall time, and we can persist + ack. The correlation is only
+        // truly required to map REALTIME (type-40/43) device-epoch timestamps, never in a hist chunk.
+        let ref = clockRef ?? { let now = Int(Date().timeIntervalSince1970); return ClockRef(device: now, wall: now) }()
+        let parsed = frames.map { parseFrame($0) }
+        let decoded = frames.isEmpty ? Streams.empty : extract(parsed, ref.device, ref.wall)
+        let decodedCount = BackfillAck.biometricCount(decoded)
+        let historicalCount = parsed.filter { $0.typeName == "HISTORICAL_DATA" }.count
+        guard BackfillAck.shouldAck(dataFrames: frames.count, decodedSamples: decodedCount,
+                                    historicalDataFrames: historicalCount) else {
+            let types = Dictionary(grouping: parsed, by: \.typeName).mapValues(\.count)
+            let versions = Set(parsed.compactMap { $0.parsed["hist_version"]?.intValue })
+            let unixes = parsed.compactMap { $0.parsed["unix"]?.intValue }.prefix(3)
+            let crcFail = parsed.filter { $0.ok == false || $0.crcOK == false }.count
+            let stamp = ISO8601DateFormatter().string(from: Date())
+            BLELogFile.append("[\(stamp)] Backfill: skip ack frames=\(frames.count) biometrics=\(decodedCount) trim=\(trim) endUnix=\(unix) types=\(types) hist_versions=\(versions) unix=\(Array(unixes)) crcFail=\(crcFail)")
+            return
+        }
+        do { try await store.insert(decoded, deviceId: deviceId) } catch { return }
 
-            // RAW: only persisted when the research toggle is ON. Default OFF → decoded-only; the
-            // chunk is still durably committed (decoded) so the trim is safe to advance + ack.
-            if enableRawCapture {
-                let meta = RawBatchMeta(
-                    batchId: "hist-\(deviceId)-\(trim)",
-                    deviceId: deviceId,
-                    clockRef: ref,
-                    capturedAt: Int(Date().timeIntervalSince1970),
-                    startTs: ref.wall,
-                    endTs: ref.wall,
-                    frameCount: frames.count,
-                    byteSize: frames.reduce(0) { $0 + $1.count })
-                do { try await store.enqueueRawBatch(meta, frames: frames) } catch { return }
-            }
+        // RAW: only persisted when the research toggle is ON. Default OFF → decoded-only; the
+        // chunk is still durably committed (decoded) so the trim is safe to advance + ack.
+        if enableRawCapture {
+            let meta = RawBatchMeta(
+                batchId: "hist-\(deviceId)-\(trim)",
+                deviceId: deviceId,
+                clockRef: ref,
+                capturedAt: Int(Date().timeIntervalSince1970),
+                startTs: ref.wall,
+                endTs: ref.wall,
+                frameCount: frames.count,
+                byteSize: frames.reduce(0) { $0 + $1.count })
+            do { try await store.enqueueRawBatch(meta, frames: frames) } catch { return }
         }
         do { try await store.setCursor("strap_trim", Int(trim)) } catch { return }
 

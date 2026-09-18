@@ -19,6 +19,12 @@ final class IntelligenceEngine: ObservableObject {
     @Published var computing = false
     @Published var note: String?
 
+    /// The in-flight scoring pass, if any. See `analyzeRecent`.
+    private var analyzeTask: Task<Void, Never>?
+    /// Set when a trigger arrives mid-pass, so data that landed after the pass
+    /// started (a strap offload completing) still gets scored.
+    private var needsRescore = false
+
     struct Computed: Identifiable {
         let day: String
         let recovery: Double?
@@ -39,7 +45,34 @@ final class IntelligenceEngine: ObservableObject {
     ///
     /// Heavy sleep-staging runs off the main actor. On iPhone we score fewer nights and cap the
     /// per-stream sample count so a 14-day BLE offload cannot jetsam the process.
+    /// Serializes callers. Four independent triggers exist (launch loop, foreground,
+    /// offload-complete, the Intelligence screen); without this they ran overlapping
+    /// passes, each holding several nights of 1 Hz streams — enough to get the app
+    /// killed on an iPhone. A caller that arrives mid-pass awaits the in-flight one.
     func analyzeRecent(maxDays: Int = PhoneBudget.intelligenceDays) async {
+        if let inFlight = analyzeTask {
+            // Ask the running pass for a catch-up rather than starting a second one.
+            needsRescore = true
+            await inFlight.value
+            return
+        }
+        let task = Task { [maxDays] in
+            await analyzeRecentImpl(maxDays: maxDays)
+            if needsRescore {
+                needsRescore = false
+                await analyzeRecentImpl(maxDays: maxDays)
+            }
+        }
+        analyzeTask = task
+        needsRescore = false
+        // `defer`, not a trailing assignment: if the caller's await is torn down the
+        // handle must still be released, or every later trigger would await a
+        // finished task and silently skip scoring for the rest of the session.
+        defer { analyzeTask = nil }
+        await task.value
+    }
+
+    private func analyzeRecentImpl(maxDays: Int) async {
         guard let store = await repo.storeHandle() else { note = "No on-device store yet."; return }
         guard let hrvCfg = Baselines.metricCfg["hrv"],
               let rhrCfg = Baselines.metricCfg["resting_hr"] else { return }
@@ -57,7 +90,7 @@ final class IntelligenceEngine: ObservableObject {
         let baselines = AnalyticsEngine.ProfileBaselines(hrv: hrvBase, restingHR: rhrBase)
 
         let maxHR = profile.hrMaxOverride > 0 ? Double(profile.hrMaxOverride) : nil
-        let now = Int(Date().timeIntervalSince1970)
+        let tz = TimeZone.current
         var out: [Computed] = []
         var dailies: [DailyMetric] = []
         var cachedSleep: [CachedSleepSession] = []
@@ -70,18 +103,20 @@ final class IntelligenceEngine: ObservableObject {
         let alreadyScored = PhoneBudget.skipScoringWhenImported
             ? IntelligenceSkip.scoredDays(in: hist) : []
 
-        for offset in 0..<maxDays {
-            let dayStart = now - offset * 86_400
-            let day = AnalyticsEngine.dayString(dayStart)
+        let wakeStarts = NightSampleWindow.wakeDayStarts(count: maxDays)
+        for (offset, wakeStart) in wakeStarts.enumerated() {
+            let day = NightSampleWindow.dayString(wakeStart)
+            let utcDay = AnalyticsEngine.dayString(Int(wakeStart.timeIntervalSince1970) + 12 * 3_600)
             if PhoneBudget.skipScoringWhenImported {
-                let localDay = Repository.dayString(Date(timeIntervalSince1970: TimeInterval(dayStart)))
-                if IntelligenceSkip.shouldSkip(utcDay: day, localDay: localDay, scored: alreadyScored) {
+                if IntelligenceSkip.shouldSkip(utcDay: utcDay, localDay: day,
+                                               scored: alreadyScored, dayOffset: offset) {
                     continue
                 }
             }
-            // Read a generous window around the night that ends on `day`; the stager finds the span.
-            let from = dayStart - 30 * 3_600
-            let to = dayStart + 12 * 3_600
+            // 18:00 previous → 14:00 wake day, so LIMIT N is the night, not yesterday afternoon.
+            let window = NightSampleWindow.sampleRange(wakeDayStart: wakeStart)
+            let from = window.from
+            let to = window.to
 
             let hr = (try? await store.hrSamples(deviceId: deviceId, from: from, to: to, limit: sampleLimit)) ?? []
             guard hr.count >= 200 else { continue }   // need real raw data, not a stray sample
@@ -90,7 +125,8 @@ final class IntelligenceEngine: ObservableObject {
             let grav = (try? await store.gravitySamples(deviceId: deviceId, from: from, to: to, limit: sampleLimit)) ?? []
 
             let res = await Self.analyzeDayOffMain(day: day, hr: hr, rr: rr, resp: resp, gravity: grav,
-                                                   profile: up, baselines: baselines, maxHROverride: maxHR)
+                                                   profile: up, baselines: baselines, maxHROverride: maxHR,
+                                                   timeZone: tz)
             out.append(Computed(day: day, recovery: res.recovery, strain: res.strain,
                                 sleepMin: res.daily.totalSleepMin, hrv: res.daily.avgHrv,
                                 rhr: res.daily.restingHr))
@@ -123,13 +159,15 @@ final class IntelligenceEngine: ObservableObject {
         day: String, hr: [HRSample], rr: [RRInterval],
         resp: [RespSample], gravity: [GravitySample],
         profile: UserProfile, baselines: AnalyticsEngine.ProfileBaselines,
-        maxHROverride: Double?
+        maxHROverride: Double?,
+        timeZone: TimeZone
     ) async -> AnalyticsEngine.DayResult {
         await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .utility).async {
                 let result = AnalyticsEngine.analyzeDay(
                     day: day, hr: hr, rr: rr, resp: resp, gravity: gravity,
-                    profile: profile, baselines: baselines, maxHROverride: maxHROverride)
+                    profile: profile, baselines: baselines, maxHROverride: maxHROverride,
+                    timeZone: timeZone)
                 cont.resume(returning: result)
             }
         }
@@ -158,11 +196,18 @@ final class IntelligenceEngine: ObservableObject {
 /// Pure helpers so a WHOOP import does not re-score nights the CSV already filled,
 /// while nights the import did not cover (new strap data) still get scored.
 enum IntelligenceSkip {
+    /// The newest nights are always rescored. A pass can run before the strap has
+    /// finished offloading, scoring last night from partial data; without this the
+    /// day would count as "done" forever and never converge once the rest arrives.
+    static let alwaysRescoreDays = 2
+
     static func scoredDays(in days: [DailyMetric]) -> Set<String> {
         Set(days.compactMap { $0.recovery != nil ? $0.day : nil })
     }
 
-    static func shouldSkip(utcDay: String, localDay: String, scored: Set<String>) -> Bool {
-        scored.contains(utcDay) || scored.contains(localDay)
+    static func shouldSkip(utcDay: String, localDay: String, scored: Set<String>,
+                           dayOffset: Int) -> Bool {
+        guard dayOffset >= alwaysRescoreDays else { return false }
+        return scored.contains(utcDay) || scored.contains(localDay)
     }
 }

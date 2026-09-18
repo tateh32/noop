@@ -43,6 +43,9 @@ struct DataSourcesView: View {
                         model.importAppleHealth(url: url)
                     }
                 }
+            #if os(iOS)
+            healthKitCard
+            #endif
             liveCard
             startFreshCard
         }
@@ -81,6 +84,12 @@ struct DataSourcesView: View {
                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
         }
     }
+
+    #if os(iOS)
+    private var healthKitCard: some View {
+        HealthKitSyncCard()
+    }
+    #endif
 
     private var appleHealthCard: some View {
         card(title: "Apple Health", icon: "heart.fill",
@@ -154,3 +163,38 @@ struct DataSourcesView: View {
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(StrandPalette.hairline))
     }
 }
+
+#if os(iOS)
+private struct HealthKitSyncCard: View {
+    @EnvironmentObject var healthKit: HealthKitBridge
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        SettingsSection(
+            icon: "heart.circle.fill",
+            title: "Apple Health live",
+            blurb: "Opt-in, on this iPhone only. NOOP reads sleep and workouts from Health, and writes sleep, workouts, heart rate, HRV and recovery (recovery is stored as metadata on last night — Health has no recovery type). Nothing leaves the device."
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                SettingsToggleRow(
+                    label: "Sync with Apple Health",
+                    help: healthKit.isAvailable
+                        ? "Turn on, then allow Health access. The HealthKit capability must be enabled on your Apple team in Xcode."
+                        : "HealthKit is not available on this device.",
+                    isOn: $healthKit.enabled)
+                if let s = healthKit.status {
+                    Text(s).font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let e = healthKit.lastError {
+                    Text(e).font(StrandFont.footnote).foregroundStyle(StrandPalette.statusCritical)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .onChange(of: healthKit.enabled) { on in
+            if on { Task { await model.syncHealthKit() } }
+        }
+    }
+}
+#endif

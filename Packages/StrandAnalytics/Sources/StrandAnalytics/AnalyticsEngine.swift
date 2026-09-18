@@ -67,6 +67,15 @@ public enum AnalyticsEngine {
         isoDay.string(from: Date(timeIntervalSince1970: TimeInterval(ts)))
     }
 
+    /// Civil `yyyy-MM-dd` in `timeZone` (the night's wake calendar, not UTC midnight).
+    public static func civilDayString(_ ts: Int, timeZone: TimeZone) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let c = cal.dateComponents([.year, .month, .day],
+                                   from: Date(timeIntervalSince1970: TimeInterval(ts)))
+        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+
     /// JSON-encode stage segments to the verbatim array shape CachedSleepSession stores.
     static func encodeStages(_ stages: [StageSegment]) -> String? {
         guard let data = try? JSONEncoder().encode(stages) else { return nil }
@@ -76,8 +85,11 @@ public enum AnalyticsEngine {
     /// Analyze one day's streams into a `DayResult`.
     ///
     /// - Parameters:
-    ///   - day: the calendar day (UTC) this metric is for; a sleep session is
+    ///   - day: the calendar day this metric is for; a sleep session is
     ///     attributed to the day its `end` falls on (a night ending that morning).
+    ///   - timeZone: how `day` and session ends are interpreted. UTC keeps
+    ///     historical tests / imports stable; the iPhone scorer passes the
+    ///     device calendar so last night is not dropped after 00:00 UTC.
     ///   - hr/rr/resp/gravity: the day's raw streams (the wider window around the
     ///     night may be passed; sleep detection finds the in-bed span itself).
     ///   - profile: user profile (age/sex/weight/height) for HRmax + calories.
@@ -91,12 +103,14 @@ public enum AnalyticsEngine {
                                   gravity: [GravitySample] = [],
                                   profile: UserProfile,
                                   baselines: ProfileBaselines = ProfileBaselines(),
-                                  maxHROverride: Double? = nil) -> DayResult {
+                                  maxHROverride: Double? = nil,
+                                  timeZone: TimeZone = TimeZone(secondsFromGMT: 0)!) -> DayResult {
 
         // ── Sleep detection + staging ─────────────────────────────────────────
-        let allSessions = SleepStager.detectSleep(hr: hr, rr: rr, resp: resp, gravity: gravity)
-        // Sessions attributed to `day` = those whose end falls on `day` (UTC).
-        let matched = allSessions.filter { dayString($0.end) == day }
+        let allSessions = SleepStager.detectSleep(hr: hr, rr: rr, resp: resp, gravity: gravity,
+                                                  timeZone: timeZone)
+        // Sessions attributed to `day` = those whose end falls on `day` in `timeZone`.
+        let matched = allSessions.filter { civilDayString($0.end, timeZone: timeZone) == day }
 
         // ── Daily sleep aggregates (AASM, in-bed weighted) ────────────────────
         var deepS = 0.0, remS = 0.0, lightS = 0.0, tstS = 0.0

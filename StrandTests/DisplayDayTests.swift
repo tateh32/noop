@@ -2,6 +2,7 @@ import XCTest
 import WhoopStore
 @testable import Strand
 
+@MainActor
 final class DisplayDayTests: XCTestCase {
     private func day(_ ymd: String, recovery: Double? = nil, hrv: Double? = nil,
                      strain: Double? = nil, rhr: Int? = nil) -> DailyMetric {

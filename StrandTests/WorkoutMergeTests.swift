@@ -2,6 +2,7 @@ import XCTest
 import WhoopStore
 @testable import Strand
 
+@MainActor
 final class WorkoutMergeTests: XCTestCase {
     private func row(start: Int, end: Int, sport: String = "Run", source: String) -> WorkoutRow {
         WorkoutRow(startTs: start, endTs: end, sport: sport, source: source,

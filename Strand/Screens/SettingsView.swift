@@ -468,38 +468,6 @@ private struct AppearancePicker: View {
     }
 }
 
-// MARK: - Section card
-
-/// A grouped settings card: icon + title header, an explanatory blurb, then content.
-private struct SettingsSection<Content: View>: View {
-    let icon: String
-    let title: String
-    let blurb: String
-    @ViewBuilder var content: () -> Content
-    @Environment(\.noopAppearance) private var appearance
-
-    var body: some View {
-        StrandCard(padding: 20) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 10) {
-                    Image(systemName: icon)
-                        .foregroundStyle(appearance.accent)
-                        .symbolRenderingMode(.hierarchical)
-                        .accessibilityHidden(true)
-                    Text(title)
-                        .font(StrandFont.headline)
-                        .foregroundStyle(StrandPalette.textPrimary)
-                }
-                Text(blurb)
-                    .font(StrandFont.subhead)
-                    .foregroundStyle(StrandPalette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                content()
-            }
-        }
-    }
-}
-
 // MARK: - Two-column form row
 
 /// Label on the left, control on the right — the two-column form feel.

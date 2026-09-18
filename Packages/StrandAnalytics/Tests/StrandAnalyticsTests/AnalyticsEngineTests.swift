@@ -14,6 +14,15 @@ final class AnalyticsEngineTests: XCTestCase {
         XCTAssertEqual(AnalyticsEngine.dayString(1_609_459_200), "2021-01-01")
     }
 
+    func testCivilDayStringUsesTimeZone() {
+        // 2021-01-01 02:00 UTC is still 2020-12-31 in UTC−5.
+        let ts = 1_609_459_200 + 2 * 3600
+        XCTAssertEqual(AnalyticsEngine.civilDayString(ts, timeZone: TimeZone(secondsFromGMT: 0)!),
+                       "2021-01-01")
+        XCTAssertEqual(AnalyticsEngine.civilDayString(ts, timeZone: TimeZone(secondsFromGMT: -5 * 3600)!),
+                       "2020-12-31")
+    }
+
     /// Build a still, low-HR night ending on a known UTC day.
     private func night(endDay: String, hours: Int) -> (start: Int, end: Int,
                                                        hr: [HRSample], rr: [RRInterval],

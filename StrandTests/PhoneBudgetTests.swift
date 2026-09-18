@@ -19,6 +19,7 @@ final class PhoneBudgetTests: XCTestCase {
         #if os(iOS)
         XCTAssertTrue(PhoneBudget.isPhone)
         XCTAssertEqual(PhoneBudget.intelligenceDays, 3)
+        XCTAssertEqual(PhoneBudget.intelligenceSampleLimit, 80_000)
         XCTAssertEqual(PhoneBudget.heatStripMaxDays, 180)
         XCTAssertEqual(PhoneBudget.dashboardDays, 400)
         #else

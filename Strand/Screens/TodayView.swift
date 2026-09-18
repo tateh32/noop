@@ -227,6 +227,7 @@ struct TodayView: View {
                     statusColor: score.map { StrandPalette.recoveryColor($0, appearance: appearance) } ?? StrandPalette.textTertiary
                 )
             }
+            TodayStatusLines(days: repo.days, sleeps: repo.sleeps)
         }
     }
 
@@ -648,6 +649,35 @@ struct TodayView: View {
     }()
 }
 
+/// One sync line + a quiet bedtime nudge. Observes `OffloadStatus` and
+/// `BehaviorStore`, never `AppModel` / live HR.
+private struct TodayStatusLines: View {
+    @EnvironmentObject private var offload: OffloadStatus
+    @EnvironmentObject private var behavior: BehaviorStore
+    let days: [DailyMetric]
+    let sleeps: [CachedSleepSession]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(SyncStatus.line(.init(
+                lastSyncedAt: offload.lastSyncedAt,
+                pendingRecords: offload.pendingRecords,
+                lastNightScored: SyncStatus.lastNightScored(sleeps: sleeps, days: days, now: Date()),
+                now: Date())))
+                .font(StrandFont.footnote)
+                .foregroundStyle(StrandPalette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Strap sync status")
+            Text(BedtimeNudge.line(now: Date(), wakeMinutes: behavior.smartAlarmMinutes, days: days))
+                .font(StrandFont.footnote)
+                .foregroundStyle(StrandPalette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("Bedtime nudge")
+        }
+        .padding(.top, 2)
+    }
+}
+
 // MARK: - Preview
 
 #if DEBUG
@@ -676,6 +706,8 @@ struct TodayView: View {
 
     return TodayView()
         .environmentObject(repo)
+        .environmentObject(OffloadStatus())
+        .environmentObject(BehaviorStore())
         .frame(width: 920, height: 940)
         .preferredColorScheme(.dark)
 }

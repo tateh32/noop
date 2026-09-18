@@ -75,5 +75,10 @@ final class HistoricalV24Tests: XCTestCase {
         let out = parseFrame(bad)
         XCTAssertTrue(out.ok)  // parse is defensive (crc will mismatch)
         XCTAssertEqual(out.parsed["hist_version"]?.intValue, 99)
+        // Unknown firmware versions used to store no fields, then still get
+        // HISTORY_END-acked — last night's 1 Hz never landed. Keep the V24
+        // DSP offsets so unix/HR/gravity still decode.
+        XCTAssertEqual(out.parsed["unix"]?.intValue, 1700000000)
+        XCTAssertEqual(out.parsed["heart_rate"]?.intValue, 63)
     }
 }

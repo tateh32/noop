@@ -32,7 +32,11 @@ the WHOOP 5.0 / MG protocol from **`b-nnett/goose`**. See [`../ATTRIBUTION.md`](
 - **CoreBluetooth** uses state restoration on iOS (`CBCentralManagerOptionRestoreIdentifierKey`
   + `UIBackgroundModes: bluetooth-central`). Simulator has no BLE.
 - **HealthKit two-way sync is still optional / not required** to use the app. Apple Health
-  history still comes in via `export.zip`, same as on the Mac.
+  history still comes in via `export.zip`, same as on the Mac. On iPhone, More → Data
+  Sources has an **opt-in live HealthKit toggle**. It reads sleep and workouts (and the
+  same types the zip importer already maps) and writes NOOP sleep, workouts, HR, HRV
+  and recovery metadata back — on-device, nothing leaves the phone. Enable the HealthKit
+  capability on your Apple team in Xcode when you sideload.
 
 ### Why the first sideload was slow and crashed
 
@@ -244,10 +248,12 @@ zone-tinted HR dot + a compact recovery/HR/battery popover), wired in
 `StrandApp.swift`. **iOS has no menu bar.** The iOS equivalents:
 
 - A **Home Screen widget** / **Lock Screen widget** (WidgetKit) showing recovery,
-  live/last HR, and battery — the natural iOS analogue of the menu-bar glance.
-- A **Live Activity** (ActivityKit) during an active workout or live HR session.
+  live/last HR, and battery — still future work.
+- A **Live Activity** (ActivityKit) during a Train session is implemented (1.4.0):
+  elapsed time + heart rate on the Lock Screen via the `NOOPLiveActivity`
+  widget-extension target. iOS 16.1+. Restores after jetsam with the workout snapshot.
 - The popover's content (`RecoveryRing`, `StatePill`, the stats row) is already
-  built from `StrandDesign` components and can be reused inside the widget views.
+  built from `StrandDesign` components and can be reused inside future widget views.
 
 ### 2. Screen lock — macOS-only API
 
@@ -492,9 +498,9 @@ targets:
 - [x] Swap `NSPasteboard` → `UIPasteboard` behind an `#if os` helper (`PlatformOpen`).
 - [x] Hide `lockScreen` on iPhone; keep `buzzBack` / `markMoment` / `runShortcut`.
 - [x] WHOOP import stages Files/iCloud zips and skips the blank trailing cycle so Today fills.
-- [ ] Replace `MenuBarExtra` with a WidgetKit widget (+ optional Live Activity); reuse `StrandDesign` views.
+- [x] Live Activity during a Train session (elapsed + HR on the Lock Screen). Home Screen widgets (the menu-bar analogue) are still future work.
 - [ ] App Intents for inbound automation (Shortcuts/Siri).
-- [ ] Add a `HealthKitBridge` doing two-way Apple Health (read live + write NOOP metrics). Not required for WHOOP CSV import.
+- [x] Add a `HealthKitBridge` doing two-way Apple Health (read live + write NOOP metrics). Opt-in on Data Sources. Not required for WHOOP CSV import.
 - [ ] Verify BLE on a **physical iPhone** with a real strap (no Simulator BLE).
 
 ---

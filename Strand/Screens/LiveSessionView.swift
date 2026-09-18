@@ -102,7 +102,7 @@ private struct RecorderBody: View {
 
     private var gpsHint: String {
         if session.usesGPS {
-            return "This sport records distance from the iPhone. Allow location when asked; keep the phone on you. Lock the screen if you want — GPS can keep running."
+            return "This sport records distance from the iPhone. Allow location when asked (Always keeps it going after you lock the screen). Keep the phone on you."
         }
         return "This sport does not use GPS. Duration and strap heart rate still save."
     }

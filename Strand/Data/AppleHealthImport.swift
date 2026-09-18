@@ -13,6 +13,13 @@ enum AppleHealthImport {
         let result = try await Task.detached(priority: .userInitiated) {
             try ImportCoordinator().importAppleHealth(from: url)
         }.value
+        try await persist(result, into: store, deviceId: deviceId)
+        return result.summary
+    }
+
+    /// Persist a parsed Apple Health result (zip or live HealthKit) into the store.
+    static func persist(_ result: AppleHealthImportResult, into store: WhoopStore,
+                        deviceId: String) async throws {
         let daily = AppleHealthAggregator.aggregate(result)
 
         // Apple-specific daily aggregates (steps/energy/vo2/hr/weight).
@@ -55,6 +62,9 @@ enum AppleHealthImport {
         }
         try await store.upsertWorkouts(workouts, deviceId: deviceId)
 
-        return result.summary
+        let sleeps = HealthKitMapper.cachedSleepSessions(from: result.sleepIntervals)
+        if !sleeps.isEmpty {
+            _ = try await store.upsertSleepSessions(sleeps, deviceId: deviceId)
+        }
     }
 }

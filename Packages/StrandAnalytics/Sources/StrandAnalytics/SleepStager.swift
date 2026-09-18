@@ -260,14 +260,19 @@ public enum SleepStager {
 
     // MARK: - detectSleep (public)
 
-    /// Detect sleep sessions from biometric streams. Empty/absent gravity → [].
-    /// Gravity-only input degrades gracefully (HR/RR/resp refinements skipped).
+    /// Detect sleep sessions from biometric streams.
+    /// Empty/absent gravity used to return `[]`, which meant an iPhone that
+    /// collected overnight HR (0x2A37) but never finished the type-47 gravity
+    /// offload showed no last night. Fall back to a conservative HR-only bout.
     public static func detectSleep(hr: [HRSample] = [],
                                    rr: [RRInterval] = [],
                                    resp: [RespSample] = [],
-                                   gravity: [GravitySample]) -> [SleepSession] {
+                                   gravity: [GravitySample],
+                                   timeZone: TimeZone = .current) -> [SleepSession] {
         let grav = gravity.sorted { $0.ts < $1.ts }
-        if grav.count < 2 { return [] }
+        if grav.count < 2 {
+            return detectSleepFromHR(hr: hr, rr: rr, timeZone: timeZone)
+        }
 
         let hrS = hr.sorted { $0.ts < $1.ts }
         let rrS = rr.sorted { $0.ts < $1.ts }
@@ -295,7 +300,71 @@ public enum SleepStager {
                                          stages: stages, restingHR: resting, avgHRV: avgHrv))
         }
         sessions.sort { $0.start < $1.start }
+        // A handful of evening gravity samples is not a night. Fall back to HR
+        // only when the gravity spine is too thin to have found a session.
+        if sessions.isEmpty && grav.count < 500 {
+            return detectSleepFromHR(hr: hr, rr: rr, timeZone: timeZone)
+        }
         return sessions
+    }
+
+    /// Long low-HR bout when gravity never landed. Midpoint must fall in
+    /// 20:00–12:00 local so an afternoon rest is not scored as last night.
+    public static func detectSleepFromHR(hr: [HRSample],
+                                         rr: [RRInterval] = [],
+                                         timeZone: TimeZone = .current) -> [SleepSession] {
+        let hrS = hr.sorted { $0.ts < $1.ts }
+        guard hrS.count >= hrRefineMinSamples else { return [] }
+        let median = HRVAnalyzer.median(hrS.map { Double($0.bpm) })
+        // Overnight-only windows have a low median — use median+slack, not 0.95×median
+        // (that rejected a flat 50 bpm night). Cap so an 80 bpm rest is not sleep.
+        let ceiling = min(72.0, max(58.0, median + 5))
+        let maxGapS = maxGapMin * 60
+        let minSleepS = minSleepMin * 60
+
+        var periods: [(start: Int, end: Int)] = []
+        var runStart: Int?
+        var lastSleepTs: Int?
+        for s in hrS {
+            let sleepLike = s.bpm >= 35 && Double(s.bpm) <= ceiling
+            if sleepLike {
+                if let last = lastSleepTs, s.ts - last > maxGapS {
+                    if let rs = runStart { periods.append((rs, last)) }
+                    runStart = s.ts
+                } else if runStart == nil {
+                    runStart = s.ts
+                }
+                lastSleepTs = s.ts
+            } else if let rs = runStart, let last = lastSleepTs {
+                periods.append((rs, last))
+                runStart = nil
+                lastSleepTs = nil
+            }
+        }
+        if let rs = runStart, let last = lastSleepTs {
+            periods.append((rs, last))
+        }
+
+        let rrS = rr.sorted { $0.ts < $1.ts }
+        var sessions: [SleepSession] = []
+        for p in periods {
+            guard (p.end - p.start) >= minSleepS else { continue }
+            guard isNocturnalOrLong(start: p.start, end: p.end, timeZone: timeZone) else { continue }
+            let stages = [StageSegment(start: p.start, end: p.end, stage: "light")]
+            let resting = sessionRestingHR(start: p.start, end: p.end, hr: hrS)
+            let avgHrv = sessionAvgHRV(start: p.start, end: p.end, rr: rrS)
+            sessions.append(SleepSession(start: p.start, end: p.end, efficiency: 0.85,
+                                         stages: stages, restingHR: resting, avgHRV: avgHrv))
+        }
+        return sessions
+    }
+
+    static func isNocturnalOrLong(start: Int, end: Int, timeZone: TimeZone) -> Bool {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let mid = Date(timeIntervalSince1970: TimeInterval((start + end) / 2))
+        let hour = cal.component(.hour, from: mid)
+        return hour >= 20 || hour < 12
     }
 
     /// asleep / in-bed in [0, 1]; asleep = in-bed − wake.
@@ -859,6 +928,64 @@ public enum SleepStager {
             remLatencyS: remLatency, wasoS: waso, efficiency: min(1.0, se),
             disturbances: disturbances, deepMin: deepS / 60.0, remMin: remS / 60.0,
             lightMin: lightS / 60.0, deepPct: pct(deepS), remPct: pct(remS), lightPct: pct(lightS))
+    }
+
+    // MARK: - Live current-stage (smart wake)
+
+    /// Approximate the *current* stage from a trailing window of live samples.
+    ///
+    /// Used by the overnight smart-wake loop, which only has the last ~30 minutes,
+    /// not a full night. Returns `"wake" | "light" | "deep" | "rem" | "unknown"`.
+    /// Thin windows (not enough HR *or* gravity) return `"unknown"` so the alarm
+    /// does not fire early on a guess.
+    public static func currentStage(now: Int,
+                                   hr: [HRSample] = [],
+                                   gravity: [GravitySample] = [],
+                                   windowS: Int = 30 * 60) -> String {
+        let lo = now - max(60, windowS)
+        let hrW = hr.filter { $0.ts >= lo && $0.ts <= now }.sorted { $0.ts < $1.ts }
+        let gW = gravity.filter { $0.ts >= lo && $0.ts <= now }.sorted { $0.ts < $1.ts }
+        guard hrW.count >= 8 || gW.count >= 8 else { return "unknown" }
+        // Full-night `stageSession` needs a real night of gravity. A 30–60 s
+        // synthetic window (and the first minutes of overnight staging) should
+        // not pretend to be a hypnogram — fall through to the short-window
+        // classifier so smart-wake tests and early-window live HR stay honest.
+        if gW.count >= 16, let first = gW.first, let last = gW.last,
+           last.ts - first.ts >= 15 * 60 {
+            let end = max(lo + Int(epochS), now)
+            let segs = stageSession(start: lo, end: end, grav: gW, hr: hrW, rr: [], resp: [])
+            if let s = segs.last?.stage { return s }
+        }
+        return currentStageFromHR(hrW, gravity: gW)
+    }
+
+    /// Conservative HR (+ optional gravity-motion) classifier for a short window.
+    /// Deep = low, stable HR. Wake = moving or elevated HR. REM = higher variance.
+    /// Everything else in the sleep band is light — the class smart-wake waits for.
+    static func currentStageFromHR(_ hr: [HRSample], gravity: [GravitySample]) -> String {
+        if gravity.count >= 3 {
+            let d = gravityDeltas(gravity)
+            let recent = Array(d.suffix(10))
+            if !recent.isEmpty {
+                let moving = recent.filter { $0 >= moveDeltaThresholdG }.count
+                if Double(moving) / Double(recent.count) >= stageWakeMoveFrac {
+                    return "wake"
+                }
+            }
+        }
+        guard hr.count >= 8 else { return "unknown" }
+        let bpms = hr.map { Double($0.bpm) }.sorted()
+        let median = bpms[bpms.count / 2]
+        let tail = Array(hr.suffix(max(5, hr.count / 6))).map { Double($0.bpm) }
+        let cur = tail.reduce(0, +) / Double(tail.count)
+        let mean = bpms.reduce(0, +) / Double(bpms.count)
+        let sd = standardDeviation(bpms)
+        _ = mean
+        if cur > max(70.0, median * 1.12) { return "wake" }
+        let p25 = bpms[max(0, bpms.count / 4)]
+        if cur <= p25 && sd < 3.5 { return "deep" }
+        if sd >= 6 && cur >= median { return "rem" }
+        return "light"
     }
 
     // MARK: - Small stats helpers
